@@ -29,6 +29,8 @@ export const identityManager = {
 };
 
 export const emailVerifier = {
+  checkDomain: (email) =>
+    request('/identity/check-domain', { method: 'POST', body: JSON.stringify({ email }) }),
   verifyEmail: (emlContent) =>
     request('/identity/verify-email', { method: 'POST', body: JSON.stringify({ emlContent }) }),
   getAllowedDomains: () =>

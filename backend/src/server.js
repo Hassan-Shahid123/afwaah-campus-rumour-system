@@ -112,6 +112,29 @@ app.post('/api/identity/verify-email', (req, res) => {
   }
 });
 
+// POST /api/identity/check-domain — simple email domain verification
+app.post('/api/identity/check-domain', (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
+    }
+    const domain = email.split('@')[1].toLowerCase();
+    const isAllowed = emailVerifier.isDomainAllowed(domain);
+    res.json({
+      email,
+      domain,
+      verified: isAllowed,
+      message: isAllowed
+        ? `✓ ${domain} is a verified university domain. You can post rumors!`
+        : `✗ ${domain} is not a recognized university domain.`,
+      allowedDomains: IDENTITY.ALLOWED_DOMAINS,
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // GET /api/identity/allowed-domains
 app.get('/api/identity/allowed-domains', (_req, res) => {
   res.json({ allowedDomains: IDENTITY.ALLOWED_DOMAINS });

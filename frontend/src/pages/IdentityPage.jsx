@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useUser } from '../useUser';
 import { identityManager, emailVerifier, membershipTree } from '../api';
 
@@ -17,6 +17,7 @@ export default function IdentityPage() {
       ) : (
         <>
           <AccountCard user={user} logout={logout} />
+          <EmailVerifyBox />
           <AdvancedSection user={user} />
         </>
       )}
@@ -147,6 +148,111 @@ function AccountCard({ user, logout }) {
   );
 }
 
+/* ── Email Verification (simple & prominent) ──────────────── */
+function EmailVerifyBox() {
+  const STORAGE_KEY = 'afwaah_verified_email';
+  const [email, setEmail] = useState('');
+  const [result, setResult] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [domains, setDomains] = useState([]);
+
+  useEffect(() => {
+    emailVerifier.getAllowedDomains()
+      .then(data => setDomains(data.allowedDomains || []))
+      .catch(() => {});
+  }, []);
+
+  const handleCheck = async () => {
+    if (!email.includes('@')) { setError('Please enter a valid email'); return; }
+    setLoading(true); setError('');
+    try {
+      const data = await emailVerifier.checkDomain(email);
+      setResult(data);
+      if (data.verified) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      }
+    } catch (err) { setError(err.message); }
+    setLoading(false);
+  };
+
+  // Already verified
+  if (result?.verified) {
+    return (
+      <div className="card" style={{ borderLeft: '4px solid #2a9d2a' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 28 }}>✓</span>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 15 }}>University Verified</div>
+            <div style={{ color: '#555', fontSize: 13 }}>
+              {result.email} — <strong>{result.domain}</strong> is a recognized campus domain
+            </div>
+          </div>
+          <span className="badge active-badge" style={{ marginLeft: 'auto' }}>Verified</span>
+        </div>
+        <button className="btn btn-secondary" style={{ marginTop: 12, fontSize: 12 }}
+          onClick={() => { setResult(null); localStorage.removeItem(STORAGE_KEY); }}>
+          Re-verify with different email
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card" style={{ borderLeft: '4px solid #333' }}>
+      <div className="card-title" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 15 }}>
+        📧 Verify Your University Email
+      </div>
+      <p style={{ color: '#555', fontSize: 13, margin: '4px 0 16px', lineHeight: 1.5 }}>
+        Enter your university email to get posting permission. We only check the domain — your email stays private.
+      </p>
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input
+          type="email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          placeholder="your.name@university.edu"
+          onKeyDown={e => e.key === 'Enter' && handleCheck()}
+          style={{ flex: 1 }}
+        />
+        <button className="btn btn-primary" onClick={handleCheck} disabled={loading || !email}>
+          {loading ? 'Checking...' : 'Verify'}
+        </button>
+      </div>
+
+      {result && !result.verified && (
+        <div className="result-box error" style={{ marginTop: 12 }}>
+          ✗ <strong>{result.domain}</strong> is not a recognized university domain.
+          <div style={{ fontSize: 12, marginTop: 4, color: '#666' }}>
+            Contact your admin if you think this is a mistake.
+          </div>
+        </div>
+      )}
+
+      {error && <div className="result-box error" style={{ marginTop: 12 }}>{error}</div>}
+
+      {domains.length > 0 && (
+        <details style={{ marginTop: 12, fontSize: 12, color: '#888' }}>
+          <summary style={{ cursor: 'pointer' }}>Accepted university domains</summary>
+          <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {domains.map(d => (
+              <span key={d} style={{ background: '#f0f0f0', padding: '2px 8px', borderRadius: 12, fontSize: 11 }}>
+                {d}
+              </span>
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
 /* ── Advanced Tools (collapsed by default) ────────────────── */
 function AdvancedSection({ user }) {
   const [expanded, setExpanded] = useState(false);
@@ -164,7 +270,7 @@ function AdvancedSection({ user }) {
         <div style={{ marginTop: 20 }}>
           <SignVerifyTool user={user} />
           <div className="divider" />
-          <EmailVerifyTool />
+          <RawEmailVerifyTool />
           <div className="divider" />
           <MembershipTools />
         </div>
@@ -239,8 +345,8 @@ function SignVerifyTool({ user }) {
   );
 }
 
-/* ── Email Verification ───────────────────────────────────── */
-function EmailVerifyTool() {
+/* ── Raw Email Verification (advanced — .eml file) ────────── */
+function RawEmailVerifyTool() {
   const [emlContent, setEmlContent] = useState('');
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
@@ -255,9 +361,9 @@ function EmailVerifyTool() {
 
   return (
     <div>
-      <h4 style={{ marginBottom: 8 }}>Email Domain Verification</h4>
+      <h4 style={{ marginBottom: 8 }}>Raw .eml Email Verification</h4>
       <p className="hint" style={{ marginBottom: 16 }}>
-        Prove you have a campus email without revealing your address (ZK-Email).
+        Advanced: Paste raw .eml content for full DKIM signature verification (ZK-Email).
       </p>
       <div className="form-group">
         <label>Raw Email Content (.eml)</label>
