@@ -176,12 +176,18 @@ function EmailVerifyCard() {
       <div style={{ background: '#f8f8f8', border: '1px solid var(--border)', borderRadius: 8, padding: 14, marginBottom: 16, fontSize: 13, lineHeight: 1.7 }}>
         <strong>How to get your .eml file:</strong>
         <ol style={{ margin: '8px 0 0', paddingLeft: 20 }}>
-          <li>Open an email sent <strong>from</strong> your university address (e.g. @seecs.edu.pk)</li>
+          <li>Log into your <strong>university email</strong> inbox (e.g. @seecs.edu.pk)</li>
+          <li>Open <strong>any email</strong> in your inbox (sent to you or by you)</li>
           <li>In Gmail: click ⋮ → "Download message" → saves as .eml</li>
           <li>In Outlook: File → Save As → choose .eml format</li>
           <li>Open the .eml file in any text editor (Notepad) and copy all the text</li>
           <li>Paste it below and click Verify</li>
         </ol>
+        <div style={{ marginTop: 8, padding: '8px 10px', background: '#fff3cd', borderRadius: 4, fontSize: 12 }}>
+          <strong>Important:</strong> The .eml must be downloaded from your <strong>university inbox</strong>.
+          The system checks the "Delivered-To" header to confirm which inbox it came from.
+          An .eml from a Gmail/Yahoo inbox will be rejected even if the sender is a university address.
+        </div>
       </div>
 
       <div className="form-group">
@@ -198,11 +204,11 @@ function EmailVerifyCard() {
         <div className="result-box success" style={{ marginTop: 12 }}>
           <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>✓ Email Verified!</div>
           <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-            <div><strong>Domain:</strong> {result.domain}</div>
+            <div><strong>Inbox Verified:</strong> {result.deliveredTo || result.domain}</div>
             <div><strong>From:</strong> {result.from}</div>
-            <div><strong>DKIM Selector:</strong> {result.selector}</div>
+            <div><strong>DKIM Domain:</strong> {result.signingDomain || result.selector}</div>
             <div><strong>Message ID:</strong> {result.messageId}</div>
-            <div style={{ marginTop: 8, color: '#080' }}>This email is from a verified university domain. You have full posting and voting privileges.</div>
+            <div style={{ marginTop: 8, color: '#080' }}>Your university inbox ownership is verified via Delivered-To + DKIM. You have full posting and voting privileges.</div>
           </div>
         </div>
       )}

@@ -21,8 +21,12 @@ import { MembershipTree } from '../src/identity/membership-tree.js';
 /**
  * Fake .eml file content simulating a university email with DKIM signature.
  * In production, this would be a real downloaded .eml file.
+ *
+ * SCENARIO: Email delivered TO a university inbox.
+ * The person who downloaded this from their university inbox is authorized.
  */
-const VALID_EML = `DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+const VALID_EML = `Delivered-To: student123@university.edu
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
         d=university.edu; s=selector1;
         bh=base64bodyhash==;
         b=base64signaturedata==;
@@ -37,7 +41,32 @@ Content-Type: text/plain; charset=UTF-8
 Your library book "Distributed Systems" is overdue. Please return it.
 `;
 
-const INVALID_DOMAIN_EML = `DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+/**
+ * SCENARIO: Email delivered TO a gmail inbox, sent FROM a university domain.
+ * An outsider downloaded this from their gmail inbox and is trying to
+ * impersonate the university sender. Should FAIL.
+ */
+const INVALID_DOMAIN_EML = `Delivered-To: someone@gmail.com
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=university.edu; s=selector1;
+        bh=base64bodyhash==;
+        b=base64signaturedata==;
+From: student123@university.edu
+To: someone@gmail.com
+Subject: Hello
+Date: Thu, 06 Feb 2026 10:00:00 +0000
+Message-ID: <test-msg-002@university.edu>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+
+This email was sent FROM university but received BY a gmail user.
+`;
+
+/**
+ * SCENARIO: Impersonation attempt — .eml from gmail inbox with gmail DKIM.
+ */
+const GMAIL_SENDER_EML = `Delivered-To: someone@gmail.com
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
         d=gmail.com; s=selector1;
         bh=base64bodyhash==;
         b=base64signaturedata==;
@@ -45,22 +74,46 @@ From: random@gmail.com
 To: someone@example.com
 Subject: Hello
 Date: Thu, 06 Feb 2026 10:00:00 +0000
-Message-ID: <test-msg-002@gmail.com>
+Message-ID: <test-msg-003@gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 
-This is not a university email.
+This is not a university email at all.
 `;
 
-const NO_DKIM_EML = `From: student@university.edu
+/**
+ * SCENARIO: Email without DKIM but delivered to university inbox.
+ * Should fail because DKIM is required.
+ */
+const NO_DKIM_EML = `Delivered-To: student@university.edu
+From: student@university.edu
 To: someone@example.com
 Subject: No DKIM
 Date: Thu, 06 Feb 2026 10:00:00 +0000
-Message-ID: <test-msg-003@university.edu>
+Message-ID: <test-msg-004@university.edu>
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 
 This email has no DKIM signature.
+`;
+
+/**
+ * SCENARIO: Email without Delivered-To header.
+ * Cannot verify inbox ownership — should fail.
+ */
+const NO_DELIVERED_TO_EML = `DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=university.edu; s=selector1;
+        bh=base64bodyhash==;
+        b=base64signaturedata==;
+From: student123@university.edu
+To: someone@example.com
+Subject: No Delivered-To
+Date: Thu, 06 Feb 2026 10:00:00 +0000
+Message-ID: <test-msg-005@university.edu>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+
+This email has no Delivered-To header.
 `;
 
 // ═══════════════════════════════════════════════════════════════
@@ -75,20 +128,31 @@ describe('EmailVerifier', () => {
   });
 
   describe('extractDKIM()', () => {
-    it('should extract DKIM data from a valid university email', async () => {
+    it('should extract DKIM data from a valid university inbox .eml', async () => {
       const result = await verifier.extractDKIM(VALID_EML);
 
       expect(result.domain).toBe('university.edu');
+      expect(result.deliveredTo).toBe('student123@university.edu');
       expect(result.from).toBe('student123@university.edu');
       expect(result.isValid).toBe(true);
       expect(result.signature).toBeTruthy();
       expect(result.selector).toBe('selector1');
       expect(result.bodyHash).toBe('base64bodyhash==');
+      expect(result.signingDomain).toBe('university.edu');
       expect(result.messageId).toBeTruthy();
     });
 
-    it('should flag invalid domain for non-university email', async () => {
+    it('should REJECT .eml from gmail inbox even if sender is university (impersonation)', async () => {
       const result = await verifier.extractDKIM(INVALID_DOMAIN_EML);
+
+      expect(result.deliveredTo).toBe('someone@gmail.com');
+      expect(result.domain).toBe('gmail.com');
+      expect(result.from).toBe('student123@university.edu'); // sender IS university
+      expect(result.isValid).toBe(false); // but Delivered-To is gmail → REJECT
+    });
+
+    it('should flag completely non-university email (gmail sender + gmail inbox)', async () => {
+      const result = await verifier.extractDKIM(GMAIL_SENDER_EML);
 
       expect(result.domain).toBe('gmail.com');
       expect(result.isValid).toBe(false);
@@ -97,9 +161,16 @@ describe('EmailVerifier', () => {
     it('should handle emails without DKIM signature', async () => {
       const result = await verifier.extractDKIM(NO_DKIM_EML);
 
-      expect(result.domain).toBe('university.edu');
+      expect(result.deliveredTo).toBe('student@university.edu');
       expect(result.signature).toBe('');
-      expect(result.isValid).toBe(true); // domain is valid, just no DKIM
+      expect(result.isValid).toBe(false); // no DKIM → dkimDomainValid is false
+    });
+
+    it('should handle emails without Delivered-To header', async () => {
+      const result = await verifier.extractDKIM(NO_DELIVERED_TO_EML);
+
+      expect(result.deliveredTo).toBe('');
+      expect(result.isValid).toBe(false); // no Delivered-To → recipientValid is false
     });
 
     it('should accept Buffer input', async () => {
@@ -112,7 +183,7 @@ describe('EmailVerifier', () => {
   });
 
   describe('validate()', () => {
-    it('should pass validation for valid university email with DKIM', async () => {
+    it('should pass validation for .eml from university inbox with DKIM', async () => {
       const dkim = await verifier.extractDKIM(VALID_EML);
       const validation = verifier.validate(dkim);
 
@@ -120,24 +191,45 @@ describe('EmailVerifier', () => {
       expect(validation.errors).toHaveLength(0);
     });
 
-    it('should fail validation for non-university domain', async () => {
+    it('should fail validation for .eml from gmail inbox (impersonation attempt)', async () => {
       const dkim = await verifier.extractDKIM(INVALID_DOMAIN_EML);
       const validation = verifier.validate(dkim);
 
       expect(validation.valid).toBe(false);
-      expect(validation.errors.some(e => e.includes('E004'))).toBe(true);
+      expect(validation.errors.some(e => e.includes('E006'))).toBe(true);
+    });
+
+    it('should fail validation when no DKIM signature', async () => {
+      const dkim = await verifier.extractDKIM(NO_DKIM_EML);
+      const validation = verifier.validate(dkim);
+
+      expect(validation.valid).toBe(false);
+      expect(validation.errors.some(e => e.includes('E003'))).toBe(true);
+    });
+
+    it('should fail validation when no Delivered-To header', async () => {
+      const dkim = await verifier.extractDKIM(NO_DELIVERED_TO_EML);
+      const validation = verifier.validate(dkim);
+
+      expect(validation.valid).toBe(false);
+      expect(validation.errors.some(e => e.includes('E005'))).toBe(true);
     });
   });
 
   describe('verifyEmail()', () => {
-    it('should return result for valid email', async () => {
+    it('should return result for valid .eml from university inbox', async () => {
       const result = await verifier.verifyEmail(VALID_EML);
       expect(result.domain).toBe('university.edu');
+      expect(result.deliveredTo).toBe('student123@university.edu');
       expect(result.isValid).toBe(true);
     });
 
-    it('should throw for invalid domain email', async () => {
-      await expect(verifier.verifyEmail(INVALID_DOMAIN_EML)).rejects.toThrow('E004');
+    it('should throw for .eml from gmail inbox (impersonation)', async () => {
+      await expect(verifier.verifyEmail(INVALID_DOMAIN_EML)).rejects.toThrow('E006');
+    });
+
+    it('should throw for .eml without Delivered-To', async () => {
+      await expect(verifier.verifyEmail(NO_DELIVERED_TO_EML)).rejects.toThrow('E005');
     });
   });
 
