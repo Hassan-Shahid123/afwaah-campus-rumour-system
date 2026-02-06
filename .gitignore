@@ -1,0 +1,23 @@
+# Dependencies
+backend/node_modules/
+frontend/node_modules/
+node_modules/
+
+# OrbitDB / IPFS test data
+orbitdb/
+test-orbitdb-*/
+backend/orbitdb/
+backend/test-orbitdb-*/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Build
+*.docx
+dist/
+build/

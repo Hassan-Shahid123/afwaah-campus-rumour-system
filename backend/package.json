@@ -1,0 +1,52 @@
+{
+  "name": "afwaah-campus-rumour-system",
+  "version": "0.1.0",
+  "description": "Decentralized, anonymous campus rumor verification system using ZK proofs and Bayesian Truth Serum",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest --verbose",
+    "test:identity": "node --experimental-vm-modules node_modules/.bin/jest tests/identity.test.js --verbose",
+    "test:network": "node --experimental-vm-modules node_modules/.bin/jest tests/network.test.js --verbose",
+    "test:scoring": "node --experimental-vm-modules node_modules/.bin/jest tests/scoring.test.js --verbose",
+    "test:integration": "node --experimental-vm-modules node_modules/.bin/jest tests/integration.test.js --verbose"
+  },
+  "keywords": [
+    "p2p",
+    "zk-proofs",
+    "semaphore",
+    "campus",
+    "anonymous",
+    "decentralized"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@chainsafe/libp2p-noise": "^17.0.0",
+    "@chainsafe/libp2p-yamux": "^8.0.1",
+    "@libp2p/gossipsub": "^15.0.12",
+    "@libp2p/identify": "^4.0.10",
+    "@libp2p/kad-dht": "^16.1.3",
+    "@libp2p/mdns": "^12.0.11",
+    "@libp2p/ping": "^3.0.10",
+    "@libp2p/tcp": "^11.0.10",
+    "@orbitdb/core": "^3.0.2",
+    "@semaphore-protocol/core": "^4.14.2",
+    "@semaphore-protocol/group": "^4.14.2",
+    "@semaphore-protocol/identity": "^4.14.2",
+    "@semaphore-protocol/proof": "^4.14.2",
+    "circomlibjs": "^0.1.7",
+    "helia": "^6.0.20",
+    "libp2p": "^3.1.3",
+    "mailparser": "^3.9.3",
+    "snarkjs": "^0.7.6"
+  },
+  "devDependencies": {
+    "@jest/globals": "^30.2.0",
+    "jest": "^30.2.0"
+  }
+}
