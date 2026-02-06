@@ -80,7 +80,7 @@ app.post('/api/identity/sign', (req, res) => {
     const { exportedKey, message } = req.body;
     const identity = identityManager.importIdentity(exportedKey);
     const signature = identityManager.signMessage(identity, message);
-    res.json({ signature: signature.toString() });
+    res.json({ signature: JSON.stringify(signature) });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -89,7 +89,11 @@ app.post('/api/identity/sign', (req, res) => {
 // POST /api/identity/verify-signature
 app.post('/api/identity/verify-signature', (req, res) => {
   try {
-    const { message, signature, publicKey } = req.body;
+    let { message, signature, publicKey } = req.body;
+    // Parse signature back if it was serialized as JSON string
+    if (typeof signature === 'string') {
+      try { signature = JSON.parse(signature); } catch {}
+    }
     const valid = identityManager.verifySignature(message, signature, publicKey);
     res.json({ valid });
   } catch (err) {

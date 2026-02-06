@@ -187,7 +187,8 @@ function SignVerifyTool({ user }) {
     try {
       const data = await identityManager.signMessage(user.exportedKey, message);
       setSignResult(data);
-      setSignature(data.signature);
+      const sig = typeof data.signature === 'object' ? JSON.stringify(data.signature) : data.signature;
+      setSignature(sig);
       setPubKey(user.publicKey);
     } catch (err) { setError(err.message); }
   };
@@ -211,7 +212,7 @@ function SignVerifyTool({ user }) {
         <input type="text" value={message} onChange={e => setMessage(e.target.value)} placeholder="Type any message..." />
       </div>
       <button className="btn btn-primary" onClick={handleSign} disabled={!message}>Sign with My Key</button>
-      {signResult && <div className="result-box success">Signature: {signResult.signature}</div>}
+      {signResult && <div className="result-box success">Signature: {typeof signResult.signature === 'object' ? JSON.stringify(signResult.signature) : signResult.signature}</div>}
 
       <div style={{ marginTop: 20 }}>
         <div className="grid-2">
