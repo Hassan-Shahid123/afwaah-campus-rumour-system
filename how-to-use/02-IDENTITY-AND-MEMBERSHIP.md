@@ -1,6 +1,19 @@
-# 🔐 Phase 1 — Identity & Membership
+# Phase 1 — Identity & Membership
 
 This module lets students create **anonymous ZK identities**, verify their university email via DKIM, and register in a **Merkle membership tree** for zero-knowledge proof of membership.
+
+---
+
+## Technologies Used in This Phase
+
+| Technology | What It Is | Why We Use It |
+|-----------|-----------|---------------|
+| **Semaphore V4** | A zero-knowledge proof protocol built for anonymous signaling. Originally developed for Ethereum but works standalone. | Creates anonymous identities where you can prove "I'm a verified student" without revealing which student you are. |
+| **EdDSA-Poseidon** | A digital signature scheme (EdDSA) combined with a ZK-friendly hash function (Poseidon). | Generates identity commitments — one-way hashes that go into the Merkle tree. Fast and circuit-friendly. |
+| **DKIM** | DomainKeys Identified Mail — a standard where email servers cryptographically sign all outgoing emails. | Proves a student actually received an email from `@university.edu` without revealing the email content. Every email has a DKIM signature. |
+| **LeanIMT** | Lean Incremental Merkle Tree — a space-efficient Merkle tree from the Semaphore library. | Stores all identity commitments. Generates inclusion proofs (prove "my commitment is in this tree") without revealing which leaf. |
+| **circomlibjs** | JavaScript implementation of ZK circuit primitives (Poseidon hash, Baby JubJub curve). | Provides the cryptographic primitives for identity generation. |
+| **mailparser** | Node.js library for parsing raw email files (.eml format). | Extracts DKIM signatures and headers from exported email files. |
 
 ---
 

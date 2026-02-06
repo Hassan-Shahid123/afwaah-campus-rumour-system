@@ -1,6 +1,19 @@
-# 📊 Phase 3 — Scoring Engine
+# Phase 3 — Scoring Engine
 
 This module implements **Bayesian Truth Serum (BTS)** scoring to separate honest voters from liars, **bot detection** via correlation dampening, and a full **reputation system** with staking, slashing, and recovery.
+
+---
+
+## Technologies & Concepts Used in This Phase
+
+| Technology / Concept | What It Is | Why We Use It |
+|---------------------|-----------|---------------|
+| **Bayesian Truth Serum (BTS)** | A game-theoretic mechanism from MIT research. Makes truth-telling the mathematically optimal strategy by combining votes with predictions. | Scores rumors for truth without any authority deciding what's true — the math rewards honest voters and punishes liars. |
+| **Robust BTS (RBTS)** | A variant of BTS designed for small populations (3-29 voters). Uses peer-pairing instead of population statistics. | On a campus with few early users, standard BTS is unreliable. RBTS works with as few as 3 voters. |
+| **Pearson Correlation** | A statistical measure (-1 to +1) of how similar two sets of data are. | Detects bots: if 50 accounts always vote identically, their pairwise Pearson correlation is ~1.0 → flagged as a cluster. |
+| **Union-Find** | A data structure for efficiently grouping items into clusters. Also called Disjoint Set Union (DSU). | Groups correlated voters into bot clusters. Fast — nearly O(1) per operation. |
+| **Mulberry32 PRNG** | A simple deterministic pseudorandom number generator. Same seed → same sequence every time. | RBTS needs random peer assignments, but all nodes must compute the same result. Seeded by `rumorId + blockHeight`. |
+| **Staking / Slashing** | Lock reputation (stake) before voting. Earn back more if honest (reward), lose more if dishonest (slash). | Makes lying expensive. You risk 1.5× what you staked. Borrowed from proof-of-stake blockchain concepts. |
 
 ---
 
@@ -403,4 +416,4 @@ All 46 tests should pass, covering:
 
 ---
 
-**← Back**: [Phase 2 — P2P Network & Storage](./03-P2P-NETWORK-AND-STORAGE.md) | [All Guides](./README.md)
+**← Back**: [Phase 2 — P2P Network & Storage](./03-P2P-NETWORK-AND-STORAGE.md) | **Next →**: [Phase 4 — Security & State](./05-SECURITY-AND-STATE.md) | [All Guides](./README.md)

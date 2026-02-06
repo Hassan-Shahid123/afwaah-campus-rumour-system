@@ -1,6 +1,23 @@
-# 🌐 Phase 2 — P2P Network & Storage
+# Phase 2 — P2P Network & Storage
 
 This module creates a fully decentralized peer-to-peer network for broadcasting rumors, votes, and identity events — with persistent storage via OrbitDB on IPFS.
+
+---
+
+## Technologies Used in This Phase
+
+| Technology | What It Is | Why We Use It |
+|-----------|-----------|---------------|
+| **libp2p** | A modular peer-to-peer networking framework (originally from IPFS). Handles transport, encryption, discovery, and pub/sub. | Lets every student's device communicate directly with other devices — no central server needed. |
+| **TCP** | Transmission Control Protocol — the standard reliable network transport. | The base transport layer for libp2p connections between peers. |
+| **Noise Protocol** | A modern encryption framework for securing network connections (used by WhatsApp, WireGuard). | All peer-to-peer traffic is encrypted. No one on the Wi-Fi can read the messages. |
+| **Yamux** | Yet Another Multiplexer — allows multiple logical streams over a single TCP connection. | Efficient: one connection to a peer can carry rumors, votes, and sync data simultaneously. |
+| **GossipSub** | A gossip-based publish/subscribe protocol. Messages "gossip" through a mesh of peers until everyone receives them. | Broadcast rumors and votes to all connected peers. Resilient — works even if some peers go offline. |
+| **mDNS** | Multicast DNS — auto-discovers services on the local network (like how Chromecast finds your TV). | Automatically finds other Afwaah users on the same campus Wi-Fi within seconds. |
+| **Kademlia DHT** | A Distributed Hash Table for peer routing across the internet. | Finds peers on different networks (different buildings, off-campus). |
+| **Helia** | A lightweight JavaScript IPFS implementation. | Provides content-addressed storage — data is identified by its hash, making it tamper-proof. |
+| **OrbitDB** | A serverless, distributed database built on IPFS. Uses CRDTs for conflict-free replication. | Stores rumors, votes, identities, and reputation scores. Automatically syncs across all peers. |
+| **CRDT** | Conflict-free Replicated Data Type — a data structure that can be merged without conflicts. | OrbitDB uses CRDTs so two peers can independently add data and merge later without issues. |
 
 ---
 

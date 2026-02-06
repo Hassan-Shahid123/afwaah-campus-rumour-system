@@ -1,6 +1,23 @@
-# 🚀 Getting Started
+# Getting Started
 
-This guide gets you from a fresh GitHub clone to a working dev environment.
+This guide gets you from a fresh GitHub clone to a working dev environment. It also explains what technologies the project uses and why.
+
+---
+
+## What Technologies Are We Using?
+
+Before diving in, here's what the project is built with and why each tool exists:
+
+| Technology | What It Is | Why We Use It |
+|-----------|-----------|---------------|
+| **Node.js (≥18)** | JavaScript runtime that runs outside the browser | Runs all our backend modules. v18+ needed for ES Modules support. |
+| **npm** | Node Package Manager | Installs all our dependencies from `package.json` |
+| **ES Modules** | Modern JavaScript import/export syntax (`import`/`export`) | Cleaner code organization. Set via `"type": "module"` in package.json. |
+| **Jest** | JavaScript testing framework | Runs all 211 tests. Needs `--experimental-vm-modules` flag for ESM. |
+| **Semaphore V4** | Zero-knowledge proof protocol | Creates anonymous identities that prove group membership without revealing identity |
+| **libp2p** | Modular peer-to-peer networking library | Handles device-to-device communication — no server needed |
+| **OrbitDB** | Distributed database built on IPFS | Stores rumors, votes, identities across all peers |
+| **Helia** | Lightweight IPFS implementation | Provides the content-addressed storage layer for OrbitDB |
 
 ---
 
@@ -50,14 +67,16 @@ Run the full test suite:
 npx --node-options="--experimental-vm-modules" jest --verbose --forceExit
 ```
 
-You should see all tests passing across three test files:
+You should see all tests passing across four test files:
 
 ```
- PASS  tests/identity.test.js     (32 tests)
- PASS  tests/network.test.js      (53 tests)
- PASS  tests/scoring.test.js      (46 tests)
+ PASS  tests/identity.test.js       (32 tests)
+ PASS  tests/network.test.js        (53 tests)
+ PASS  tests/scoring.test.js        (46 tests)
+ PASS  tests/integration.test.js    (80 tests)
 
-Tests:  131 passed, 131 total
+Tests:       211 passed, 211 total
+Test Suites: 4 passed, 4 total
 ```
 
 > **Note**: The `--experimental-vm-modules` flag is required because the project uses ES Modules (`"type": "module"` in package.json). The `--forceExit` ensures libp2p network tests clean up properly.
@@ -69,14 +88,17 @@ Tests:  131 passed, 131 total
 You can run each phase's tests separately:
 
 ```bash
-# Phase 1: Identity & Membership
+# Phase 1: Identity & Membership (32 tests)
 npm run test:identity
 
-# Phase 2: P2P Network & Storage
+# Phase 2: P2P Network & Storage (53 tests)
 npm run test:network
 
-# Phase 3: Scoring Engine
+# Phase 3: Scoring Engine (46 tests)
 npm run test:scoring
+
+# Phase 4: Security & Integration (80 tests)
+npx --node-options="--experimental-vm-modules" jest tests/integration.test.js --verbose --forceExit
 ```
 
 ---
@@ -95,22 +117,28 @@ afwaah-campus-rumour-system/
 │   │   │   └── membership-tree.js
 │   │   ├── network/              # Phase 2: P2P Network
 │   │   │   ├── node.js
-│   │   │   └── gossip-controller.js
+│   │   │   ├── gossip-controller.js
+│   │   │   └── anti-entropy.js
 │   │   ├── storage/              # Phase 2: Data Layer
 │   │   │   ├── db.js
 │   │   │   └── stores.js
-│   │   └── scoring/              # Phase 3: Scoring Engine
-│   │       ├── correlation-dampener.js
-│   │       ├── bts-engine.js
-│   │       ├── rbts-engine.js
-│   │       └── reputation-manager.js
+│   │   ├── scoring/              # Phase 3: Scoring Engine
+│   │   │   ├── bts-engine.js
+│   │   │   ├── rbts-engine.js
+│   │   │   ├── correlation-dampener.js
+│   │   │   ├── reputation-manager.js
+│   │   │   └── trust-propagator.js
+│   │   └── state/                # Phase 4: State Management
+│   │       ├── snapshotter.js
+│   │       └── tombstone-manager.js
 │   └── tests/
-│       ├── identity.test.js
-│       ├── network.test.js
-│       └── scoring.test.js
+│       ├── identity.test.js      # 32 tests
+│       ├── network.test.js       # 53 tests
+│       ├── scoring.test.js       # 46 tests
+│       └── integration.test.js   # 80 tests
 ├── docs/                         # Architecture & design docs
 ├── how-to-use/                   # These guides
-└── frontend/                     # (Coming soon)
+└── frontend/                     # (Placeholder — GUI built separately)
 ```
 
 ---
@@ -128,6 +156,20 @@ Previous test runs may have left ports open. Wait a few seconds and retry, or ki
 
 ### `npm install` fails on native modules
 circomlibjs needs native compilation. On Windows, ensure you have the "Desktop development with C++" workload from Visual Studio Build Tools. On Linux: `sudo apt install build-essential`.
+
+---
+
+---
+
+## What Each Phase Built
+
+| Phase | Focus | What Was Built | Tests |
+|-------|-------|----------------|-------|
+| **1** | Identity & Membership | Email verification, anonymous ZK identities, Merkle group proofs | 32 |
+| **2** | P2P Network & Storage | libp2p nodes, GossipSub messaging, OrbitDB distributed storage | 53 |
+| **3** | Scoring Engine | BTS/RBTS truth scoring, bot detection, reputation staking/slashing | 46 |
+| **4** | Security & State | Tombstone deletion, OpLog snapshots, PageRank trust, anti-entropy sync | 80 |
+| | | **Total** | **211** |
 
 ---
 
