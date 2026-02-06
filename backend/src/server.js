@@ -78,11 +78,16 @@ app.post('/api/identity/import', (req, res) => {
 app.post('/api/identity/sign', (req, res) => {
   try {
     const { exportedKey, message } = req.body;
+    if (!exportedKey || !message) {
+      return res.status(400).json({ error: 'exportedKey and message are required' });
+    }
     const identity = identityManager.importIdentity(exportedKey);
     const signature = identityManager.signMessage(identity, message);
-    // BigInt-safe serialization
+    // BigInt-safe serialization — convert BigInts to strings
     const sigStr = JSON.stringify(signature, (_k, v) => typeof v === 'bigint' ? v.toString() : v);
-    res.json({ signature: sigStr });
+    // Also return the public key in a format that can be sent back for verification
+    const pubKeyStr = identity.publicKey.map(p => p.toString());
+    res.json({ signature: sigStr, publicKey: pubKeyStr });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -92,10 +97,35 @@ app.post('/api/identity/sign', (req, res) => {
 app.post('/api/identity/verify-signature', (req, res) => {
   try {
     let { message, signature, publicKey } = req.body;
-    // Parse signature back if it was serialized as JSON string
+    if (!message || !signature || !publicKey) {
+      return res.status(400).json({ error: 'message, signature, and publicKey are required' });
+    }
+
+    // Reconstruct signature: parse JSON string → convert string numbers back to BigInt
     if (typeof signature === 'string') {
       try { signature = JSON.parse(signature); } catch {}
     }
+    if (signature && signature.R8 && signature.S) {
+      signature = {
+        R8: signature.R8.map(v => BigInt(v)),
+        S: BigInt(signature.S),
+      };
+    }
+
+    // Reconstruct publicKey: "num1,num2" string or ["num1","num2"] array → [BigInt, BigInt]
+    if (typeof publicKey === 'string') {
+      // Could be JSON array or comma-separated
+      try {
+        const parsed = JSON.parse(publicKey);
+        publicKey = parsed;
+      } catch {
+        publicKey = publicKey.split(',').map(s => s.trim());
+      }
+    }
+    if (Array.isArray(publicKey)) {
+      publicKey = publicKey.map(v => BigInt(v));
+    }
+
     const valid = identityManager.verifySignature(message, signature, publicKey);
     res.json({ valid });
   } catch (err) {

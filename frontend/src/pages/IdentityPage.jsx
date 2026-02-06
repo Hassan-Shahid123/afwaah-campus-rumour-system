@@ -231,10 +231,14 @@ function SignVerifyCard({ user }) {
     setError(''); setSignResult(null);
     try {
       const data = await identityManager.signMessage(user.exportedKey, message);
+      // signature comes as a JSON string from the backend
       const sig = typeof data.signature === 'object' ? JSON.stringify(data.signature) : String(data.signature);
       setSignResult(sig);
       setSignature(sig);
-      const pk = typeof user.publicKey === 'object' ? JSON.stringify(user.publicKey) : String(user.publicKey);
+      // publicKey comes as ["bigint1","bigint2"] array from sign response
+      const pk = data.publicKey
+        ? JSON.stringify(data.publicKey)
+        : (typeof user.publicKey === 'object' ? JSON.stringify(user.publicKey) : String(user.publicKey));
       setPubKey(pk);
     } catch (err) { setError(err.message); }
   };
