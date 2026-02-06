@@ -1,71 +1,58 @@
 import { useState } from 'react';
-import { snapshotter, config } from '../api';
+import { snapshotter, tombstoneManager, config } from '../api';
 
 export default function StatePage() {
   return (
     <div>
       <div className="page-header">
-        <h2>State & Admin</h2>
-        <p>Snapshotter OpLog management, state rebuild, import/export, and system configuration</p>
+        <h2>Admin Panel</h2>
+        <p>System state, operation log, data management, and configuration</p>
       </div>
 
-      <StateInfoSection />
-      <OpLogSection />
-      <IngestBatchSection />
-      <RebuildSection />
-      <div className="divider" />
-      <StateExportImportSection />
-      <div className="divider" />
-      <ConfigSection />
+      <SystemOverview />
+      <OpLogViewer />
+      <AdminActions />
+      <ConfigViewer />
     </div>
   );
 }
 
-/* ── State Info ─────────────────────────────────────────────── */
-function StateInfoSection() {
+/* ── System Overview ──────────────────────────────────────── */
+function SystemOverview() {
   const [info, setInfo] = useState(null);
   const [snapshot, setSnapshot] = useState(null);
   const [error, setError] = useState('');
 
-  const handleFetchInfo = async () => {
+  const handleFetch = async () => {
     setError('');
-    try { setInfo(await snapshotter.getInfo()); }
-    catch (err) { setError(err.message); }
-  };
-
-  const handleFetchSnapshot = async () => {
-    setError('');
-    try { setSnapshot(await snapshotter.getLastSnapshot()); }
-    catch (err) { setError(err.message); }
+    try {
+      const [i, s] = await Promise.all([snapshotter.getInfo(), snapshotter.getLastSnapshot()]);
+      setInfo(i);
+      setSnapshot(s);
+    } catch (err) { setError(err.message); }
   };
 
   return (
     <div className="card">
-      <div className="card-title">
-        Snapshotter — Status
-        <span className="badge">State Manager</span>
+      <div className="card-title" style={{ textTransform: 'none', letterSpacing: 0 }}>
+        System Status
       </div>
-      <div className="btn-group">
-        <button className="btn btn-primary" onClick={handleFetchInfo}>Get Info</button>
-        <button className="btn btn-secondary" onClick={handleFetchSnapshot}>Get Last Snapshot</button>
-      </div>
+      <button className="btn btn-primary" onClick={handleFetch}>Refresh Status</button>
       {info && (
         <div className="stats-row" style={{ marginTop: 16 }}>
           <div className="stat-card">
             <div className="stat-value">{info.opsSinceSnapshot}</div>
-            <div className="stat-label">Ops Since Snapshot</div>
+            <div className="stat-label">Pending Ops</div>
           </div>
           <div className="stat-card">
             <div className="stat-value">{info.snapshotCount}</div>
-            <div className="stat-label">Total Snapshots</div>
+            <div className="stat-label">Snapshots</div>
           </div>
         </div>
       )}
-      {snapshot && (
-        <div className="result-box success">
-          {snapshot.snapshot === null
-            ? 'No snapshots taken yet'
-            : JSON.stringify(snapshot, null, 2)}
+      {snapshot && snapshot.snapshot && (
+        <div className="result-box success" style={{ fontSize: 12 }}>
+          <strong>Last Snapshot:</strong>{'\n'}{JSON.stringify(snapshot, null, 2)}
         </div>
       )}
       {error && <div className="result-box error">{error}</div>}
@@ -73,8 +60,8 @@ function StateInfoSection() {
   );
 }
 
-/* ── OpLog Viewer ──────────────────────────────────────────── */
-function OpLogSection() {
+/* ── Operation Log ────────────────────────────────────────── */
+function OpLogViewer() {
   const [opLog, setOpLog] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -90,32 +77,31 @@ function OpLogSection() {
 
   return (
     <div className="card">
-      <div className="card-title">
-        snapshotter.getOpLog()
-        <span className="badge">Immutable Log</span>
+      <div className="card-title" style={{ textTransform: 'none', letterSpacing: 0 }}>
+        Operation Log
       </div>
-      <button className="btn btn-primary" onClick={handleFetch} disabled={loading}>
-        {loading && <span className="spinner" />} Fetch OpLog
+      <button className="btn btn-secondary" onClick={handleFetch} disabled={loading}>
+        {loading ? <><span className="spinner" /> Loading...</> : 'Load Log'}
       </button>
       {opLog && (
         <>
-          <div style={{ marginTop: 12, marginBottom: 8, fontSize: 13, color: '#555' }}>
-            {opLog.length} operations in the log
+          <div style={{ marginTop: 12, color: '#555', fontSize: 13 }}>
+            {opLog.length} operation{opLog.length !== 1 ? 's' : ''} recorded
           </div>
           {opLog.length > 0 ? (
-            <table className="data-table">
+            <table className="data-table" style={{ marginTop: 8 }}>
               <thead>
-                <tr><th>#</th><th>Type</th><th>Payload</th><th>Timestamp</th></tr>
+                <tr><th>#</th><th>Type</th><th>Summary</th><th>Time</th></tr>
               </thead>
               <tbody>
-                {opLog.slice(-50).map((op, i) => (
+                {opLog.slice(-30).reverse().map((op, i) => (
                   <tr key={i}>
-                    <td>{op._ingestIndex ?? i}</td>
+                    <td>{op._ingestIndex ?? opLog.length - 1 - i}</td>
                     <td><span className="tag tag-dark">{op.type}</span></td>
-                    <td className="mono" style={{ fontSize: 11, maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {JSON.stringify(op.payload).substring(0, 120)}
+                    <td style={{ fontSize: 12, maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {opSummary(op)}
                     </td>
-                    <td className="mono" style={{ fontSize: 11 }}>
+                    <td style={{ fontSize: 12, color: '#888', whiteSpace: 'nowrap' }}>
                       {op.timestamp ? new Date(op.timestamp).toLocaleTimeString() : '-'}
                     </td>
                   </tr>
@@ -123,7 +109,7 @@ function OpLogSection() {
               </tbody>
             </table>
           ) : (
-            <div style={{ color: '#888', fontSize: 13, marginTop: 8 }}>OpLog is empty — submit rumors and votes first</div>
+            <div style={{ color: '#888', fontSize: 13, marginTop: 8 }}>Log is empty — post some rumors first!</div>
           )}
         </>
       )}
@@ -132,96 +118,73 @@ function OpLogSection() {
   );
 }
 
-/* ── Batch Ingest ──────────────────────────────────────────── */
-function IngestBatchSection() {
-  const [opsJson, setOpsJson] = useState('');
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState('');
+function opSummary(op) {
+  const p = op.payload || {};
+  switch (op.type) {
+    case 'JOIN': return `User ${p.nullifier || p.commitment || ''} joined`;
+    case 'RUMOR': return p.text ? p.text.substring(0, 60) : `Rumor ${p.id}`;
+    case 'VOTE': return `${p.nullifier || 'someone'} voted ${p.vote} on ${p.rumorId}`;
+    case 'TOMBSTONE': return `Deleted rumor ${p.rumorId}`;
+    default: return JSON.stringify(p).substring(0, 60);
+  }
+}
 
-  const sampleOps = JSON.stringify([
-    { type: 'JOIN', payload: { commitment: 'user_A', nullifier: 'user_A' }, timestamp: 1700000000000 },
-    { type: 'RUMOR', payload: { id: 'r1', text: 'Test rumor', topic: 'general', nullifier: 'user_A' }, timestamp: 1700000000000 },
-    { type: 'VOTE', payload: { rumorId: 'r1', vote: 'TRUE', nullifier: 'user_A', prediction: { TRUE: 0.7, FALSE: 0.2, UNVERIFIED: 0.1 } }, timestamp: 1700000000000 },
-  ], null, 2);
-
-  const handleIngest = async () => {
-    setError('');
-    try {
-      const ops = JSON.parse(opsJson);
-      const data = await snapshotter.ingestBatch(ops);
-      setResult(data);
-    } catch (err) { setError(err.message); }
-  };
+/* ── Admin Actions (collapsible) ──────────────────────────── */
+function AdminActions() {
+  const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="card">
-      <div className="card-title">
-        snapshotter.ingestBatch()
-        <span className="badge">Bulk</span>
+    <div className="card collapsible-card">
+      <div className="collapsible-header" onClick={() => setExpanded(!expanded)}>
+        <div className="card-title" style={{ marginBottom: 0 }}>
+          Data Management
+        </div>
+        <span className="collapse-icon">{expanded ? '▲' : '▼'}</span>
       </div>
-      <div className="form-group">
-        <label>Operations (JSON Array)</label>
-        <textarea rows={8} value={opsJson} onChange={e => setOpsJson(e.target.value)}
-          placeholder={sampleOps} />
-        <div className="hint">Array of {'{ type, payload, timestamp }'} — types: JOIN, RUMOR, VOTE, TOMBSTONE</div>
-      </div>
-      <button className="btn btn-primary" onClick={handleIngest} disabled={!opsJson}>Ingest Batch</button>
-      {result && <div className="result-box success">{JSON.stringify(result, null, 2)}</div>}
-      {error && <div className="result-box error">{error}</div>}
+
+      {expanded && (
+        <div style={{ marginTop: 20 }}>
+          <RebuildTool />
+          <div className="divider" />
+          <BatchIngestTool />
+          <div className="divider" />
+          <ExportImportStateTool />
+          <div className="divider" />
+          <AdminTombstoneTool />
+        </div>
+      )}
     </div>
   );
 }
 
-/* ── Rebuild ───────────────────────────────────────────────── */
-function RebuildSection() {
+/* ── Rebuild State ────────────────────────────────────────── */
+function RebuildTool() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleRebuild = async () => {
     setLoading(true); setError('');
-    try {
-      const data = await snapshotter.rebuild();
-      setResult(data);
-    } catch (err) { setError(err.message); }
+    try { setResult(await snapshotter.rebuild()); }
+    catch (err) { setError(err.message); }
     setLoading(false);
   };
 
   return (
-    <div className="card">
-      <div className="card-title">
-        snapshotter.rebuild()
-        <span className="badge">Full Rebuild</span>
-      </div>
-      <p style={{ fontSize: 13, color: '#555', marginBottom: 16 }}>
-        Walk the entire OpLog, skip tombstoned entries, and rebuild the materialized view from scratch.
-      </p>
+    <div>
+      <h4 style={{ marginBottom: 8 }}>Rebuild State from Log</h4>
+      <p className="hint" style={{ marginBottom: 12 }}>Replay all operations and rebuild the current state from scratch.</p>
       <button className="btn btn-primary" onClick={handleRebuild} disabled={loading}>
-        {loading && <span className="spinner" />} Rebuild State
+        {loading ? <><span className="spinner" /> Rebuilding...</> : 'Rebuild'}
       </button>
       {result && (
         <>
-          <div className="stats-row" style={{ marginTop: 16 }}>
-            <div className="stat-card">
-              <div className="stat-value">{result.snapshotId}</div>
-              <div className="stat-label">Snapshot #</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-value">{result.opLogLength}</div>
-              <div className="stat-label">OpLog Length</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-value">{result.activeRumors}</div>
-              <div className="stat-label">Active Rumors</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-value">{result.registeredUsers}</div>
-              <div className="stat-label">Users</div>
-            </div>
+          <div className="stats-row" style={{ marginTop: 12 }}>
+            <div className="stat-card"><div className="stat-value">{result.activeRumors}</div><div className="stat-label">Rumors</div></div>
+            <div className="stat-card"><div className="stat-value">{result.totalVotes}</div><div className="stat-label">Votes</div></div>
+            <div className="stat-card"><div className="stat-value">{result.registeredUsers}</div><div className="stat-label">Users</div></div>
           </div>
-          <div className="result-box success">
-            {JSON.stringify(result.state, null, 2)}
-          </div>
+          <div className="result-box success" style={{ fontSize: 12 }}>{JSON.stringify(result.state, null, 2)}</div>
         </>
       )}
       {error && <div className="result-box error">{error}</div>}
@@ -229,8 +192,36 @@ function RebuildSection() {
   );
 }
 
-/* ── State Export / Import ─────────────────────────────────── */
-function StateExportImportSection() {
+/* ── Batch Ingest ─────────────────────────────────────────── */
+function BatchIngestTool() {
+  const [opsJson, setOpsJson] = useState('');
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+
+  const handleIngest = async () => {
+    setError('');
+    try { setResult(await snapshotter.ingestBatch(JSON.parse(opsJson))); }
+    catch (err) { setError(err.message); }
+  };
+
+  return (
+    <div>
+      <h4 style={{ marginBottom: 8 }}>Batch Ingest Operations</h4>
+      <p className="hint" style={{ marginBottom: 12 }}>Ingest multiple operations at once (JOIN, RUMOR, VOTE, TOMBSTONE).</p>
+      <div className="form-group">
+        <label>Operations (JSON Array)</label>
+        <textarea rows={5} value={opsJson} onChange={e => setOpsJson(e.target.value)}
+          placeholder={'[\n  { "type": "JOIN", "payload": { "commitment": "user1", "nullifier": "user1" }, "timestamp": 1700000000000 }\n]'} />
+      </div>
+      <button className="btn btn-primary" onClick={handleIngest} disabled={!opsJson}>Ingest</button>
+      {result && <div className="result-box success">{JSON.stringify(result, null, 2)}</div>}
+      {error && <div className="result-box error">{error}</div>}
+    </div>
+  );
+}
+
+/* ── Export / Import ──────────────────────────────────────── */
+function ExportImportStateTool() {
   const [exportData, setExportData] = useState('');
   const [importData, setImportData] = useState('');
   const [result, setResult] = useState(null);
@@ -241,37 +232,30 @@ function StateExportImportSection() {
     try {
       const data = await snapshotter.exportData();
       setExportData(JSON.stringify(data.data, null, 2));
-      setResult({ action: 'exported', opLogLength: data.data.opLog?.length });
+      setResult({ action: 'exported', ops: data.data?.opLog?.length || 0 });
     } catch (err) { setError(err.message); }
   };
 
   const handleImport = async () => {
     setError('');
-    try {
-      const data = JSON.parse(importData);
-      const res = await snapshotter.importData(data);
-      setResult(res);
-    } catch (err) { setError(err.message); }
+    try { setResult(await snapshotter.importData(JSON.parse(importData))); }
+    catch (err) { setError(err.message); }
   };
 
   return (
-    <div className="card">
-      <div className="card-title">
-        snapshotter — Export / Import
-        <span className="badge">Persistence</span>
-      </div>
+    <div>
+      <h4 style={{ marginBottom: 8 }}>Export / Import State</h4>
       <div className="grid-2">
         <div>
-          <button className="btn btn-secondary" onClick={handleExport}>Export State</button>
-          {exportData && <textarea rows={8} value={exportData} readOnly style={{ marginTop: 12 }} />}
+          <button className="btn btn-secondary" onClick={handleExport}>Export</button>
+          {exportData && <textarea rows={5} value={exportData} readOnly style={{ marginTop: 12 }} />}
         </div>
         <div>
           <div className="form-group">
             <label>Import Data (JSON)</label>
-            <textarea rows={8} value={importData} onChange={e => setImportData(e.target.value)}
-              placeholder="Paste exported state data here" />
+            <textarea rows={5} value={importData} onChange={e => setImportData(e.target.value)} placeholder="Paste exported data" />
           </div>
-          <button className="btn btn-primary" onClick={handleImport} disabled={!importData}>Import & Rebuild</button>
+          <button className="btn btn-primary" onClick={handleImport} disabled={!importData}>Import</button>
         </div>
       </div>
       {result && <div className="result-box success">{JSON.stringify(result, null, 2)}</div>}
@@ -280,8 +264,50 @@ function StateExportImportSection() {
   );
 }
 
-/* ── System Configuration ──────────────────────────────────── */
-function ConfigSection() {
+/* ── Admin Tombstone ──────────────────────────────────────── */
+function AdminTombstoneTool() {
+  const [rumorId, setRumorId] = useState('');
+  const [reason, setReason] = useState('');
+  const [adminId] = useState('admin');
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+
+  const handleCreate = async () => {
+    setError('');
+    try {
+      const data = await tombstoneManager.createAdminTombstone(rumorId, reason || 'admin_action', adminId);
+      await snapshotter.ingest({
+        type: 'TOMBSTONE',
+        payload: { rumorId, authorNullifier: adminId, reason: reason || 'admin_action' },
+        timestamp: Date.now(),
+      });
+      setResult(data);
+    } catch (err) { setError(err.message); }
+  };
+
+  return (
+    <div>
+      <h4 style={{ marginBottom: 8 }}>Admin: Delete Any Rumor</h4>
+      <p className="hint" style={{ marginBottom: 12 }}>Remove a rumor regardless of who posted it (admin power).</p>
+      <div className="grid-2">
+        <div className="form-group">
+          <label>Rumor ID</label>
+          <input type="text" value={rumorId} onChange={e => setRumorId(e.target.value)} placeholder="Rumor to delete" />
+        </div>
+        <div className="form-group">
+          <label>Reason</label>
+          <input type="text" value={reason} onChange={e => setReason(e.target.value)} placeholder="spam / policy violation" />
+        </div>
+      </div>
+      <button className="btn btn-danger" onClick={handleCreate} disabled={!rumorId}>Admin Delete</button>
+      {result && <div className="result-box success">{JSON.stringify(result, null, 2)}</div>}
+      {error && <div className="result-box error">{error}</div>}
+    </div>
+  );
+}
+
+/* ── System Config ────────────────────────────────────────── */
+function ConfigViewer() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(null);
@@ -295,41 +321,25 @@ function ConfigSection() {
   const sections = data ? Object.entries(data) : [];
 
   return (
-    <div className="card">
-      <div className="card-title">
-        System Configuration
-        <span className="badge">config.js</span>
+    <div className="card collapsible-card">
+      <div className="collapsible-header" onClick={() => { if (!data) handleFetch(); }}>
+        <div className="card-title" style={{ marginBottom: 0 }}>
+          System Configuration
+        </div>
+        {!data && <span className="collapse-icon">Load ▼</span>}
       </div>
-      <button className="btn btn-primary" onClick={handleFetch}>Load Config</button>
+
       {sections.length > 0 && (
         <div style={{ marginTop: 16 }}>
           {sections.map(([key, value]) => (
-            <div key={key} style={{ marginBottom: 8 }}>
-              <div
-                onClick={() => setExpanded(expanded === key ? null : key)}
-                style={{
-                  padding: '10px 14px',
-                  background: '#f5f5f5',
-                  border: '1px solid #e0e0e0',
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  fontSize: 13,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
+            <div key={key} style={{ marginBottom: 6 }}>
+              <div className="config-header" onClick={() => setExpanded(expanded === key ? null : key)}>
                 <span>{key}</span>
-                <span style={{ fontSize: 11, color: '#888' }}>
-                  {expanded === key ? '▲ collapse' : '▼ expand'}
-                </span>
+                <span style={{ fontSize: 11, color: '#888' }}>{expanded === key ? '▲' : '▼'}</span>
               </div>
               {expanded === key && (
                 <div className="result-box" style={{ marginTop: 0, borderTopLeftRadius: 0, borderTopRightRadius: 0 }}>
-                  {typeof value === 'object'
-                    ? JSON.stringify(value, null, 2)
-                    : String(value)}
+                  {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
                 </div>
               )}
             </div>

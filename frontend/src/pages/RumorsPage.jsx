@@ -1,507 +1,427 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useUser } from '../useUser';
 import { snapshotter, tombstoneManager } from '../api';
 
 export default function RumorsPage() {
-  return (
-    <div>
-      <div className="page-header">
-        <h2>Rumors & Voting</h2>
-        <p>Submit rumors, cast votes with predictions, and manage tombstones — all via the Snapshotter OpLog</p>
-      </div>
-
-      <SubmitRumorSection />
-      <CastVoteSection />
-      <JoinOperationSection />
-      <ViewActiveRumorsSection />
-      <div className="divider" />
-      <TombstoneCreateSection />
-      <AdminTombstoneSection />
-      <TombstoneCheckSection />
-      <TombstoneListSection />
-      <ValidateVoteSection />
-    </div>
-  );
-}
-
-/* ── Submit Rumor (via Snapshotter.ingest) ──────────────────── */
-function SubmitRumorSection() {
-  const [text, setText] = useState('');
-  const [topic, setTopic] = useState('general');
-  const [nullifier, setNullifier] = useState('');
-  const [rumorId, setRumorId] = useState('');
-  const [result, setResult] = useState(null);
+  const { user } = useUser();
+  const [rumors, setRumors] = useState({});
+  const [votes, setVotes] = useState({});
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const topics = ['administration', 'safety', 'events', 'academic', 'facilities', 'general'];
-
-  const handleSubmit = async () => {
-    setError('');
-    try {
-      const id = rumorId || `rumor_${Date.now()}`;
-      const op = {
-        type: 'RUMOR',
-        payload: {
-          id,
-          text,
-          topic,
-          nullifier: nullifier || `nul_${Date.now()}`,
-          timestamp: Date.now(),
-        },
-        timestamp: Date.now(),
-      };
-      const data = await snapshotter.ingest(op);
-      setResult({ ...data, rumorId: id });
-      // Also register with tombstone manager
-      await tombstoneManager.registerRumor(id, op.payload.nullifier);
-    } catch (err) { setError(err.message); }
-  };
-
-  return (
-    <div className="card">
-      <div className="card-title">
-        Submit Rumor
-        <span className="badge">snapshotter.ingest(RUMOR)</span>
-      </div>
-      <div className="form-group">
-        <label>Rumor Text</label>
-        <textarea rows={3} value={text} onChange={e => setText(e.target.value)}
-          placeholder="Enter the rumor text (max 2000 chars)..." maxLength={2000} />
-        <div className="hint">{text.length}/2000 characters</div>
-      </div>
-      <div className="grid-2">
-        <div className="form-group">
-          <label>Topic</label>
-          <select value={topic} onChange={e => setTopic(e.target.value)}>
-            {topics.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-        <div className="form-group">
-          <label>Nullifier (author ID)</label>
-          <input type="text" className="input-mono" value={nullifier} onChange={e => setNullifier(e.target.value)}
-            placeholder="Auto-generated if blank" />
-        </div>
-      </div>
-      <div className="form-group">
-        <label>Rumor ID (optional)</label>
-        <input type="text" className="input-mono" value={rumorId} onChange={e => setRumorId(e.target.value)}
-          placeholder="Auto-generated if blank" />
-      </div>
-      <button className="btn btn-primary" onClick={handleSubmit} disabled={!text}>Submit Rumor</button>
-      {result && (
-        <div className="result-box success">
-          {`Rumor submitted!\nrumorId: ${result.rumorId}\nsnapshotTriggered: ${result.snapshotTriggered}\nopsSinceSnapshot: ${result.opsSinceSnapshot}`}
-        </div>
-      )}
-      {error && <div className="result-box error">{error}</div>}
-    </div>
-  );
-}
-
-/* ── Cast Vote (via Snapshotter.ingest) ────────────────────── */
-function CastVoteSection() {
-  const [rumorId, setRumorId] = useState('');
-  const [vote, setVote] = useState('TRUE');
-  const [nullifier, setNullifier] = useState('');
-  const [predTrue, setPredTrue] = useState('0.5');
-  const [predFalse, setPredFalse] = useState('0.3');
-  const [predUnverified, setPredUnverified] = useState('0.2');
-  const [stakeAmount, setStakeAmount] = useState('1');
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState('');
-
-  const handleVote = async () => {
-    setError('');
-    try {
-      const op = {
-        type: 'VOTE',
-        payload: {
-          rumorId,
-          vote,
-          nullifier: nullifier || `voter_${Date.now()}`,
-          prediction: {
-            TRUE: parseFloat(predTrue),
-            FALSE: parseFloat(predFalse),
-            UNVERIFIED: parseFloat(predUnverified),
-          },
-          stakeAmount: parseFloat(stakeAmount),
-          timestamp: Date.now(),
-        },
-        timestamp: Date.now(),
-      };
-      const data = await snapshotter.ingest(op);
-      setResult(data);
-    } catch (err) { setError(err.message); }
-  };
-
-  return (
-    <div className="card">
-      <div className="card-title">
-        Cast Vote
-        <span className="badge">snapshotter.ingest(VOTE)</span>
-      </div>
-      <div className="grid-2">
-        <div className="form-group">
-          <label>Rumor ID</label>
-          <input type="text" className="input-mono" value={rumorId} onChange={e => setRumorId(e.target.value)}
-            placeholder="ID of the rumor to vote on" />
-        </div>
-        <div className="form-group">
-          <label>Vote</label>
-          <select value={vote} onChange={e => setVote(e.target.value)}>
-            <option value="TRUE">TRUE</option>
-            <option value="FALSE">FALSE</option>
-            <option value="UNVERIFIED">UNVERIFIED</option>
-          </select>
-        </div>
-      </div>
-      <div className="grid-2">
-        <div className="form-group">
-          <label>Voter Nullifier</label>
-          <input type="text" className="input-mono" value={nullifier} onChange={e => setNullifier(e.target.value)}
-            placeholder="Auto-generated if blank" />
-        </div>
-        <div className="form-group">
-          <label>Stake Amount</label>
-          <input type="number" value={stakeAmount} onChange={e => setStakeAmount(e.target.value)} min="1" />
-        </div>
-      </div>
-      <div style={{ marginBottom: 16 }}>
-        <label style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 8 }}>
-          Prediction (must sum to 1.0)
-        </label>
-        <div style={{ display: 'flex', gap: 12 }}>
-          <div className="form-group" style={{ flex: 1 }}>
-            <label style={{ fontSize: 11 }}>P(TRUE)</label>
-            <input type="number" step="0.01" min="0" max="1" value={predTrue} onChange={e => setPredTrue(e.target.value)} />
-          </div>
-          <div className="form-group" style={{ flex: 1 }}>
-            <label style={{ fontSize: 11 }}>P(FALSE)</label>
-            <input type="number" step="0.01" min="0" max="1" value={predFalse} onChange={e => setPredFalse(e.target.value)} />
-          </div>
-          <div className="form-group" style={{ flex: 1 }}>
-            <label style={{ fontSize: 11 }}>P(UNVERIFIED)</label>
-            <input type="number" step="0.01" min="0" max="1" value={predUnverified} onChange={e => setPredUnverified(e.target.value)} />
-          </div>
-        </div>
-      </div>
-      <button className="btn btn-primary" onClick={handleVote} disabled={!rumorId}>Cast Vote</button>
-      {result && (
-        <div className="result-box success">
-          {`Vote recorded!\nsnapshotTriggered: ${result.snapshotTriggered}\nopsSinceSnapshot: ${result.opsSinceSnapshot}`}
-        </div>
-      )}
-      {error && <div className="result-box error">{error}</div>}
-    </div>
-  );
-}
-
-/* ── Join Operation ────────────────────────────────────────── */
-function JoinOperationSection() {
-  const [commitment, setCommitment] = useState('');
-  const [nullifier, setNullifier] = useState('');
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState('');
-
-  const handleJoin = async () => {
-    setError('');
-    try {
-      const op = {
-        type: 'JOIN',
-        payload: {
-          commitment: commitment || `commit_${Date.now()}`,
-          nullifier: nullifier || commitment || `nul_${Date.now()}`,
-          timestamp: Date.now(),
-        },
-        timestamp: Date.now(),
-      };
-      const data = await snapshotter.ingest(op);
-      setResult(data);
-    } catch (err) { setError(err.message); }
-  };
-
-  return (
-    <div className="card">
-      <div className="card-title">
-        Join Network
-        <span className="badge">snapshotter.ingest(JOIN)</span>
-      </div>
-      <div className="grid-2">
-        <div className="form-group">
-          <label>Commitment</label>
-          <input type="text" className="input-mono" value={commitment} onChange={e => setCommitment(e.target.value)}
-            placeholder="Identity commitment" />
-        </div>
-        <div className="form-group">
-          <label>Nullifier</label>
-          <input type="text" className="input-mono" value={nullifier} onChange={e => setNullifier(e.target.value)}
-            placeholder="Derived from identity" />
-        </div>
-      </div>
-      <button className="btn btn-primary" onClick={handleJoin}>Send JOIN</button>
-      {result && <div className="result-box success">{JSON.stringify(result, null, 2)}</div>}
-      {error && <div className="result-box error">{error}</div>}
-    </div>
-  );
-}
-
-/* ── View Active Rumors (from Snapshotter rebuild) ─────────── */
-function ViewActiveRumorsSection() {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handleRebuild = async () => {
+  const loadRumors = async () => {
     setLoading(true); setError('');
     try {
-      const result = await snapshotter.rebuild();
-      setData(result);
+      const data = await snapshotter.rebuild();
+      setRumors(data.state?.rumors || {});
+      setVotes(data.state?.votes || {});
+      setStats({
+        activeRumors: data.activeRumors,
+        tombstonedRumors: data.tombstonedRumors,
+        totalVotes: data.totalVotes,
+        registeredUsers: data.registeredUsers,
+      });
     } catch (err) { setError(err.message); }
     setLoading(false);
   };
 
+  useEffect(() => {
+    let active = true;
+    snapshotter.rebuild().then(data => {
+      if (!active) return;
+      setRumors(data.state?.rumors || {});
+      setVotes(data.state?.votes || {});
+      setStats({
+        activeRumors: data.activeRumors,
+        tombstonedRumors: data.tombstonedRumors,
+        totalVotes: data.totalVotes,
+        registeredUsers: data.registeredUsers,
+      });
+      setLoading(false);
+    }).catch(err => {
+      if (!active) return;
+      setError(err.message);
+      setLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
+
   return (
-    <div className="card">
-      <div className="card-title">
-        Active Rumors
-        <span className="badge">snapshotter.rebuild()</span>
+    <div>
+      <div className="page-header">
+        <h2>Campus Feed</h2>
+        <p>Browse rumors, vote on what you think is true, and post your own</p>
       </div>
-      <button className="btn btn-primary" onClick={handleRebuild} disabled={loading}>
-        {loading && <span className="spinner" />} Rebuild State & View
-      </button>
-      {data && (
-        <>
-          <div className="stats-row" style={{ marginTop: 16 }}>
-            <div className="stat-card">
-              <div className="stat-value">{data.activeRumors}</div>
-              <div className="stat-label">Active Rumors</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-value">{data.tombstonedRumors}</div>
-              <div className="stat-label">Tombstoned</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-value">{data.totalVotes}</div>
-              <div className="stat-label">Total Votes</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-value">{data.registeredUsers}</div>
-              <div className="stat-label">Users</div>
-            </div>
+
+      {/* Stats bar */}
+      {stats && (
+        <div className="stats-row">
+          <div className="stat-card">
+            <div className="stat-value">{stats.activeRumors}</div>
+            <div className="stat-label">Active Rumors</div>
           </div>
-          {data.state && Object.keys(data.state.rumors).length > 0 && (
-            <table className="data-table">
-              <thead>
-                <tr><th>ID</th><th>Text</th><th>Topic</th><th>Votes</th></tr>
-              </thead>
-              <tbody>
-                {Object.entries(data.state.rumors).map(([id, r]) => (
-                  <tr key={id}>
-                    <td className="mono">{id}</td>
-                    <td>{r.text?.substring(0, 80)}{r.text?.length > 80 ? '...' : ''}</td>
-                    <td><span className="tag">{r.topic}</span></td>
-                    <td>{data.state.votes[id]?.length || 0}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </>
+          <div className="stat-card">
+            <div className="stat-value">{stats.totalVotes}</div>
+            <div className="stat-label">Total Votes</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-value">{stats.registeredUsers}</div>
+            <div className="stat-label">Users</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-value">{stats.tombstonedRumors}</div>
+            <div className="stat-label">Removed</div>
+          </div>
+        </div>
       )}
+
+      {/* Post a new rumor */}
+      {user ? (
+        <PostRumor user={user} onPosted={loadRumors} />
+      ) : (
+        <div className="card" style={{ textAlign: 'center', padding: '24px', color: '#888' }}>
+          &#9670; <a href="/" style={{ color: '#000', fontWeight: 600 }}>Create an account</a> to post rumors and vote
+        </div>
+      )}
+
+      {/* Refresh button */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '20px 0 12px' }}>
+        <h3 style={{ fontSize: 16, fontWeight: 600 }}>Recent Rumors</h3>
+        <button className="btn btn-secondary" onClick={loadRumors} disabled={loading} style={{ padding: '6px 14px', fontSize: 12 }}>
+          {loading ? <><span className="spinner" /> Loading...</> : '↻ Refresh'}
+        </button>
+      </div>
+
       {error && <div className="result-box error">{error}</div>}
+
+      {/* Rumor Feed */}
+      {Object.keys(rumors).length === 0 && !loading ? (
+        <div className="card" style={{ textAlign: 'center', padding: 32, color: '#888' }}>
+          No rumors yet. Be the first to post one!
+        </div>
+      ) : (
+        Object.entries(rumors)
+          .sort((a, b) => (b[1].timestamp || 0) - (a[1].timestamp || 0))
+          .map(([id, rumor]) => (
+            <RumorCard
+              key={id}
+              id={id}
+              rumor={rumor}
+              voteList={votes[id] || []}
+              user={user}
+              onVoted={loadRumors}
+            />
+          ))
+      )}
+
+      {/* Tombstone management */}
+      {user && <TombstoneSection user={user} />}
     </div>
   );
 }
 
-/* ── tombstoneManager.createTombstone() ────────────────────── */
-function TombstoneCreateSection() {
-  const [rumorId, setRumorId] = useState('');
-  const [authorNullifier, setAuthorNullifier] = useState('');
-  const [reason, setReason] = useState('');
-  const [result, setResult] = useState(null);
+/* ── Post a Rumor (like Facebook post box) ────────────────── */
+function PostRumor({ user, onPosted }) {
+  const [text, setText] = useState('');
+  const [topic, setTopic] = useState('general');
+  const [posting, setPosting] = useState(false);
   const [error, setError] = useState('');
 
-  const handleCreate = async () => {
-    setError('');
+  const topics = ['general', 'academic', 'administration', 'safety', 'events', 'facilities'];
+
+  const handlePost = async () => {
+    if (!text.trim()) return;
+    setPosting(true); setError('');
     try {
-      const data = await tombstoneManager.createTombstone(rumorId, authorNullifier, reason || undefined);
-      setResult(data);
-      // Also ingest into snapshotter
-      await snapshotter.ingest({
-        type: 'TOMBSTONE',
-        payload: { rumorId, authorNullifier, reason },
+      const rumorId = `rumor_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const op = {
+        type: 'RUMOR',
+        payload: {
+          id: rumorId,
+          text: text.trim(),
+          topic,
+          nullifier: user.nullifier,
+          timestamp: Date.now(),
+        },
         timestamp: Date.now(),
-      });
+      };
+      await snapshotter.ingest(op);
+      await tombstoneManager.registerRumor(rumorId, user.nullifier);
+      setText('');
+      onPosted();
     } catch (err) { setError(err.message); }
+    setPosting(false);
   };
 
   return (
-    <div className="card">
-      <div className="card-title">
-        tombstoneManager.createTombstone()
-        <span className="badge">Author Only</span>
-      </div>
-      <div className="grid-2">
-        <div className="form-group">
-          <label>Rumor ID</label>
-          <input type="text" className="input-mono" value={rumorId} onChange={e => setRumorId(e.target.value)} />
+    <div className="card post-box">
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+        <div className="avatar">{user.nullifier.substring(5, 7).toUpperCase()}</div>
+        <div style={{ flex: 1 }}>
+          <textarea
+            className="post-input"
+            rows={2}
+            value={text}
+            onChange={e => setText(e.target.value)}
+            placeholder="What's the latest rumor on campus?"
+            maxLength={2000}
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <select value={topic} onChange={e => setTopic(e.target.value)} className="topic-select">
+                {topics.map(t => <option key={t} value={t}>#{t}</option>)}
+              </select>
+              <span style={{ fontSize: 12, color: '#888' }}>{text.length}/2000</span>
+            </div>
+            <button className="btn btn-primary" onClick={handlePost} disabled={posting || !text.trim()}>
+              {posting ? <><span className="spinner" /> Posting...</> : 'Post Rumor'}
+            </button>
+          </div>
         </div>
-        <div className="form-group">
-          <label>Author Nullifier</label>
-          <input type="text" className="input-mono" value={authorNullifier} onChange={e => setAuthorNullifier(e.target.value)} />
-        </div>
       </div>
-      <div className="form-group">
-        <label>Reason (optional)</label>
-        <input type="text" value={reason} onChange={e => setReason(e.target.value)} placeholder="author_requested" />
-      </div>
-      <button className="btn btn-danger" onClick={handleCreate} disabled={!rumorId || !authorNullifier}>
-        Delete Rumor (Tombstone)
-      </button>
-      {result && <div className="result-box success">{JSON.stringify(result, null, 2)}</div>}
-      {error && <div className="result-box error">{error}</div>}
+      {error && <div className="result-box error" style={{ marginTop: 8 }}>{error}</div>}
     </div>
   );
 }
 
-/* ── tombstoneManager.createAdminTombstone() ───────────────── */
-function AdminTombstoneSection() {
-  const [rumorId, setRumorId] = useState('');
-  const [reason, setReason] = useState('');
-  const [adminId, setAdminId] = useState('system');
-  const [result, setResult] = useState(null);
+/* ── Rumor Card (like a social media post) ────────────────── */
+function RumorCard({ id, rumor, voteList, user, onVoted }) {
+  const [voting, setVoting] = useState(false);
   const [error, setError] = useState('');
+  const [showDetails, setShowDetails] = useState(false);
 
-  const handleCreate = async () => {
-    setError('');
+  // Count votes by type
+  const voteCounts = { TRUE: 0, FALSE: 0, UNVERIFIED: 0 };
+  voteList.forEach(v => {
+    if (voteCounts[v.vote] !== undefined) voteCounts[v.vote]++;
+  });
+  const totalVotes = voteList.length;
+
+  // Check if current user already voted
+  const userVote = user ? voteList.find(v => v.nullifier === user.nullifier) : null;
+
+  const handleVote = async (voteType) => {
+    if (!user || voting || userVote) return;
+    setVoting(true); setError('');
     try {
-      const data = await tombstoneManager.createAdminTombstone(rumorId, reason, adminId);
-      setResult(data);
-      await snapshotter.ingest({
-        type: 'TOMBSTONE',
-        payload: { rumorId, authorNullifier: adminId, reason },
+      // Simple prediction based on vote type
+      const predictions = {
+        TRUE: { TRUE: 0.7, FALSE: 0.2, UNVERIFIED: 0.1 },
+        FALSE: { TRUE: 0.2, FALSE: 0.7, UNVERIFIED: 0.1 },
+        UNVERIFIED: { TRUE: 0.2, FALSE: 0.2, UNVERIFIED: 0.6 },
+      };
+
+      const op = {
+        type: 'VOTE',
+        payload: {
+          rumorId: id,
+          vote: voteType,
+          nullifier: user.nullifier,
+          prediction: predictions[voteType],
+          stakeAmount: 1,
+          timestamp: Date.now(),
+        },
         timestamp: Date.now(),
-      });
+      };
+      await snapshotter.ingest(op);
+      onVoted();
     } catch (err) { setError(err.message); }
+    setVoting(false);
+  };
+
+  const [now] = useState(() => Date.now());
+  const timeAgo = (ts) => {
+    if (!ts) return '';
+    const diff = now - ts;
+    if (diff < 60000) return 'just now';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+    return `${Math.floor(diff / 86400000)}d ago`;
   };
 
   return (
-    <div className="card">
-      <div className="card-title">
-        tombstoneManager.createAdminTombstone()
-        <span className="badge">Admin</span>
-      </div>
-      <div className="grid-2">
-        <div className="form-group">
-          <label>Rumor ID</label>
-          <input type="text" className="input-mono" value={rumorId} onChange={e => setRumorId(e.target.value)} />
+    <div className="card rumor-card">
+      {/* Header */}
+      <div className="rumor-header">
+        <div className="avatar-sm">{(rumor.nullifier || 'AN').substring(5, 7).toUpperCase()}</div>
+        <div>
+          <span className="rumor-author">{rumor.nullifier || 'anonymous'}</span>
+          <span className="rumor-time">{timeAgo(rumor.timestamp)}</span>
         </div>
-        <div className="form-group">
-          <label>Admin ID</label>
-          <input type="text" value={adminId} onChange={e => setAdminId(e.target.value)} />
+        <span className="topic-tag">#{rumor.topic || 'general'}</span>
+      </div>
+
+      {/* Content */}
+      <div className="rumor-text">{rumor.text}</div>
+
+      {/* Vote bar */}
+      {totalVotes > 0 && (
+        <div className="vote-bar-container">
+          <div className="vote-bar">
+            {voteCounts.TRUE > 0 && (
+              <div className="vote-bar-segment vote-true" style={{ width: `${(voteCounts.TRUE / totalVotes) * 100}%` }}>
+                {Math.round((voteCounts.TRUE / totalVotes) * 100)}%
+              </div>
+            )}
+            {voteCounts.FALSE > 0 && (
+              <div className="vote-bar-segment vote-false" style={{ width: `${(voteCounts.FALSE / totalVotes) * 100}%` }}>
+                {Math.round((voteCounts.FALSE / totalVotes) * 100)}%
+              </div>
+            )}
+            {voteCounts.UNVERIFIED > 0 && (
+              <div className="vote-bar-segment vote-unverified" style={{ width: `${(voteCounts.UNVERIFIED / totalVotes) * 100}%` }}>
+                {Math.round((voteCounts.UNVERIFIED / totalVotes) * 100)}%
+              </div>
+            )}
+          </div>
+          <div className="vote-legend">
+            <span>&#9632; True ({voteCounts.TRUE})</span>
+            <span className="legend-false">&#9632; False ({voteCounts.FALSE})</span>
+            <span className="legend-unverified">&#9632; Unsure ({voteCounts.UNVERIFIED})</span>
+            <span style={{ marginLeft: 'auto', color: '#888' }}>{totalVotes} vote{totalVotes !== 1 ? 's' : ''}</span>
+          </div>
         </div>
+      )}
+
+      {/* Vote buttons */}
+      <div className="vote-actions">
+        {userVote ? (
+          <div className="already-voted">✓ You voted: <strong>{userVote.vote}</strong></div>
+        ) : user ? (
+          <>
+            <button className={`vote-btn vote-btn-true ${voting ? 'disabled' : ''}`} onClick={() => handleVote('TRUE')} disabled={voting}>
+              ▲ True
+            </button>
+            <button className={`vote-btn vote-btn-false ${voting ? 'disabled' : ''}`} onClick={() => handleVote('FALSE')} disabled={voting}>
+              ▼ False
+            </button>
+            <button className={`vote-btn vote-btn-unsure ${voting ? 'disabled' : ''}`} onClick={() => handleVote('UNVERIFIED')} disabled={voting}>
+              ● Not Sure
+            </button>
+          </>
+        ) : (
+          <span style={{ fontSize: 13, color: '#888' }}>Sign in to vote</span>
+        )}
+
+        <button className="vote-btn" onClick={() => setShowDetails(!showDetails)} style={{ marginLeft: 'auto' }}>
+          {showDetails ? 'Hide Details' : 'Details'}
+        </button>
       </div>
-      <div className="form-group">
-        <label>Reason</label>
-        <input type="text" value={reason} onChange={e => setReason(e.target.value)} placeholder="spam / policy_violation" />
-      </div>
-      <button className="btn btn-danger" onClick={handleCreate} disabled={!rumorId}>Admin Tombstone</button>
-      {result && <div className="result-box success">{JSON.stringify(result, null, 2)}</div>}
-      {error && <div className="result-box error">{error}</div>}
+
+      {/* Details (collapsed) */}
+      {showDetails && (
+        <div className="rumor-details">
+          <div><strong>Rumor ID:</strong> <span className="mono">{id}</span></div>
+          <div><strong>Author:</strong> <span className="mono">{rumor.nullifier}</span></div>
+          <div><strong>Topic:</strong> {rumor.topic}</div>
+          {rumor.timestamp && <div><strong>Posted:</strong> {new Date(rumor.timestamp).toLocaleString()}</div>}
+          {totalVotes > 0 && <div><strong>Votes:</strong> {JSON.stringify(voteCounts)}</div>}
+        </div>
+      )}
+
+      {error && <div className="result-box error" style={{ marginTop: 8, fontSize: 12 }}>{error}</div>}
     </div>
   );
 }
 
-/* ── tombstoneManager.isTombstoned ─────────────────────────── */
-function TombstoneCheckSection() {
+/* ── Tombstone (Delete Rumor) Section ─────────────────────── */
+function TombstoneSection({ user }) {
+  const [expanded, setExpanded] = useState(false);
   const [rumorId, setRumorId] = useState('');
+  const [reason, setReason] = useState('');
   const [result, setResult] = useState(null);
+  const [checkResult, setCheckResult] = useState(null);
+  const [checkId, setCheckId] = useState('');
+  const [allTombstones, setAllTombstones] = useState(null);
   const [error, setError] = useState('');
+
+  const handleDelete = async () => {
+    setError('');
+    try {
+      const data = await tombstoneManager.createTombstone(rumorId, user.nullifier, reason || 'author_requested');
+      await snapshotter.ingest({
+        type: 'TOMBSTONE',
+        payload: { rumorId, authorNullifier: user.nullifier, reason: reason || 'author_requested' },
+        timestamp: Date.now(),
+      });
+      setResult(data);
+    } catch (err) { setError(err.message); }
+  };
 
   const handleCheck = async () => {
     setError('');
-    try {
-      const data = await tombstoneManager.isTombstoned(rumorId);
-      setResult(data);
-    } catch (err) { setError(err.message); }
+    try { setCheckResult(await tombstoneManager.isTombstoned(checkId)); }
+    catch (err) { setError(err.message); }
   };
 
-  return (
-    <div className="card">
-      <div className="card-title">tombstoneManager.isTombstoned()</div>
-      <div className="inline-row">
-        <div className="form-group">
-          <label>Rumor ID</label>
-          <input type="text" className="input-mono" value={rumorId} onChange={e => setRumorId(e.target.value)} />
-        </div>
-        <button className="btn btn-primary" onClick={handleCheck} disabled={!rumorId}>Check</button>
-      </div>
-      {result && (
-        <div className={`result-box ${result.isTombstoned ? 'error' : 'success'}`}>
-          {result.isTombstoned
-            ? `✗ TOMBSTONED\n${JSON.stringify(result.metadata, null, 2)}`
-            : '✓ Active (not tombstoned)'}
-        </div>
-      )}
-      {error && <div className="result-box error">{error}</div>}
-    </div>
-  );
-}
-
-/* ── tombstoneManager.getAll() ─────────────────────────────── */
-function TombstoneListSection() {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState('');
-
-  const handleFetch = async () => {
+  const handleGetAll = async () => {
     setError('');
-    try { setData(await tombstoneManager.getAll()); }
+    try { setAllTombstones(await tombstoneManager.getAll()); }
     catch (err) { setError(err.message); }
   };
 
   return (
-    <div className="card">
-      <div className="card-title">tombstoneManager.getTombstonedIds()</div>
-      <button className="btn btn-secondary" onClick={handleFetch}>Fetch All Tombstones</button>
-      {data && (
-        <div className="result-box success">
-          {`Count: ${data.count}\nIDs: ${data.tombstonedIds.length > 0 ? data.tombstonedIds.join(', ') : '(none)'}`}
+    <div className="card collapsible-card" style={{ marginTop: 24 }}>
+      <div className="collapsible-header" onClick={() => setExpanded(!expanded)}>
+        <div className="card-title" style={{ marginBottom: 0 }}>
+          Manage Rumors (Delete / Check Status)
         </div>
-      )}
-      {error && <div className="result-box error">{error}</div>}
-    </div>
-  );
-}
-
-/* ── tombstoneManager.validateVote() ───────────────────────── */
-function ValidateVoteSection() {
-  const [rumorId, setRumorId] = useState('');
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState('');
-
-  const handleValidate = async () => {
-    setError('');
-    try {
-      const data = await tombstoneManager.validateVote(rumorId);
-      setResult(data);
-    } catch (err) { setError(err.message); }
-  };
-
-  return (
-    <div className="card">
-      <div className="card-title">tombstoneManager.validateVote()</div>
-      <div className="inline-row">
-        <div className="form-group">
-          <label>Rumor ID</label>
-          <input type="text" className="input-mono" value={rumorId} onChange={e => setRumorId(e.target.value)} />
-        </div>
-        <button className="btn btn-primary" onClick={handleValidate} disabled={!rumorId}>Validate</button>
+        <span className="collapse-icon">{expanded ? '▲' : '▼'}</span>
       </div>
-      {result && (
-        <div className={`result-box ${result.valid ? 'success' : 'error'}`}>
-          {result.valid ? '✓ Vote is allowed on this rumor' : `✗ ${result.reason}`}
+
+      {expanded && (
+        <div style={{ marginTop: 20 }}>
+          {/* Delete your own rumor */}
+          <h4 style={{ marginBottom: 8 }}>Delete Your Rumor</h4>
+          <p className="hint" style={{ marginBottom: 12 }}>
+            You can only delete rumors you posted. Enter the rumor ID from the details view.
+          </p>
+          <div className="grid-2">
+            <div className="form-group">
+              <label>Rumor ID</label>
+              <input type="text" value={rumorId} onChange={e => setRumorId(e.target.value)}
+                placeholder="e.g. rumor_1700000000000_abc" />
+            </div>
+            <div className="form-group">
+              <label>Reason (optional)</label>
+              <input type="text" value={reason} onChange={e => setReason(e.target.value)} placeholder="Why delete?" />
+            </div>
+          </div>
+          <button className="btn btn-danger" onClick={handleDelete} disabled={!rumorId}>Delete Rumor</button>
+          {result && <div className="result-box success">{JSON.stringify(result, null, 2)}</div>}
+
+          <div className="divider" />
+
+          {/* Check if tombstoned */}
+          <h4 style={{ marginBottom: 8 }}>Check Rumor Status</h4>
+          <div className="inline-row">
+            <div className="form-group">
+              <label>Rumor ID</label>
+              <input type="text" value={checkId} onChange={e => setCheckId(e.target.value)} placeholder="Rumor ID" />
+            </div>
+            <button className="btn btn-secondary" onClick={handleCheck} disabled={!checkId}>Check</button>
+          </div>
+          {checkResult && (
+            <div className={`result-box ${checkResult.isTombstoned ? 'error' : 'success'}`}>
+              {checkResult.isTombstoned ? '✗ This rumor has been deleted' : '✓ This rumor is still active'}
+            </div>
+          )}
+
+          <div className="divider" />
+
+          {/* List all tombstones */}
+          <button className="btn btn-secondary" onClick={handleGetAll}>View All Deleted Rumors</button>
+          {allTombstones && (
+            <div className="result-box success" style={{ marginTop: 8 }}>
+              {allTombstones.count === 0 ? 'No rumors have been deleted yet.'
+                : `${allTombstones.count} deleted: ${allTombstones.tombstonedIds.join(', ')}`}
+            </div>
+          )}
+
+          {error && <div className="result-box error">{error}</div>}
         </div>
       )}
-      {error && <div className="result-box error">{error}</div>}
     </div>
   );
 }
