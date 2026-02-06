@@ -104,10 +104,13 @@ app.post('/api/identity/verify-signature', (req, res) => {
 });
 
 // POST /api/identity/verify-email
-app.post('/api/identity/verify-email', (req, res) => {
+app.post('/api/identity/verify-email', async (req, res) => {
   try {
     const { emlContent } = req.body;
-    const result = emailVerifier.verifyEmail(emlContent);
+    if (!emlContent) {
+      return res.status(400).json({ error: 'Please paste the .eml file content' });
+    }
+    const result = await emailVerifier.verifyEmail(emlContent);
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -730,6 +733,20 @@ app.get('/api/config', (_req, res) => {
 // ╚═══════════════════════════════════════════════════════════╝
 
 const PORT = process.env.PORT || 3001;
+
+// Global error safety — never crash on bad input
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err.message);
+});
+process.on('unhandledRejection', (err) => {
+  console.error('[unhandledRejection]', err?.message || err);
+});
+
+// Catch-all Express error handler
+app.use((err, _req, res, _next) => {
+  console.error('[Express error]', err.message);
+  res.status(500).json({ error: err.message || 'Internal server error' });
+});
 
 app.listen(PORT, () => {
   console.log(`\n  ┌─────────────────────────────────────────┐`);
