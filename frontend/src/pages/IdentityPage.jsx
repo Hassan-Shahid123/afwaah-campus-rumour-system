@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useUser } from '../useUser';
 import { identityManager, emailVerifier, membershipTree } from '../api';
 
@@ -17,7 +17,7 @@ export default function IdentityPage() {
       ) : (
         <>
           <AccountCard user={user} logout={logout} />
-          <EmailVerifyBox />
+          <EmailCheckCard />
           <AdvancedSection user={user} />
         </>
       )}
@@ -148,77 +148,38 @@ function AccountCard({ user, logout }) {
   );
 }
 
-/* ── Email Verification (simple & prominent) ──────────────── */
-function EmailVerifyBox() {
-  const STORAGE_KEY = 'afwaah_verified_email';
+/* ── Simple Email Check (main feature) ────────────────────── */
+function EmailCheckCard() {
   const [email, setEmail] = useState('');
-  const [result, setResult] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      return saved ? JSON.parse(saved) : null;
-    } catch { return null; }
-  });
+  const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [domains, setDomains] = useState([]);
-
-  useEffect(() => {
-    emailVerifier.getAllowedDomains()
-      .then(data => setDomains(data.allowedDomains || []))
-      .catch(() => {});
-  }, []);
 
   const handleCheck = async () => {
-    if (!email.includes('@')) { setError('Please enter a valid email'); return; }
-    setLoading(true); setError('');
+    setLoading(true); setError(''); setResult(null);
     try {
-      const data = await emailVerifier.checkDomain(email);
+      const data = await emailVerifier.checkEmail(email);
       setResult(data);
-      if (data.verified) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      }
     } catch (err) { setError(err.message); }
     setLoading(false);
   };
 
-  // Already verified
-  if (result?.verified) {
-    return (
-      <div className="card" style={{ borderLeft: '4px solid #2a9d2a' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 28 }}>✓</span>
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 15 }}>University Verified</div>
-            <div style={{ color: '#555', fontSize: 13 }}>
-              {result.email} — <strong>{result.domain}</strong> is a recognized campus domain
-            </div>
-          </div>
-          <span className="badge active-badge" style={{ marginLeft: 'auto' }}>Verified</span>
-        </div>
-        <button className="btn btn-secondary" style={{ marginTop: 12, fontSize: 12 }}
-          onClick={() => { setResult(null); localStorage.removeItem(STORAGE_KEY); }}>
-          Re-verify with different email
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className="card" style={{ borderLeft: '4px solid #333' }}>
-      <div className="card-title" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 15 }}>
-        📧 Verify Your University Email
+    <div className="card">
+      <div className="card-title" style={{ textTransform: 'none', letterSpacing: 0 }}>
+        &#9993; Verify Your University Email
       </div>
-      <p style={{ color: '#555', fontSize: 13, margin: '4px 0 16px', lineHeight: 1.5 }}>
-        Enter your university email to get posting permission. We only check the domain — your email stays private.
+      <p className="hint" style={{ marginBottom: 16 }}>
+        Enter your university email to check if your domain is verified. Verified users get full posting and voting privileges.
       </p>
 
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
         <input
           type="email"
           value={email}
           onChange={e => setEmail(e.target.value)}
-          placeholder="your.name@university.edu"
-          onKeyDown={e => e.key === 'Enter' && handleCheck()}
+          placeholder="you@student.nust.edu.pk"
+          onKeyDown={e => e.key === 'Enter' && email && handleCheck()}
           style={{ flex: 1 }}
         />
         <button className="btn btn-primary" onClick={handleCheck} disabled={loading || !email}>
@@ -226,29 +187,20 @@ function EmailVerifyBox() {
         </button>
       </div>
 
-      {result && !result.verified && (
-        <div className="result-box error" style={{ marginTop: 12 }}>
-          ✗ <strong>{result.domain}</strong> is not a recognized university domain.
-          <div style={{ fontSize: 12, marginTop: 4, color: '#666' }}>
-            Contact your admin if you think this is a mistake.
+      {result && (
+        <div className={`result-box ${result.verified ? 'success' : 'error'}`} style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
+            {result.verified ? '✓ Verified Domain' : '✗ Not Recognized'}
           </div>
+          <div>{result.message}</div>
+          {!result.verified && (
+            <div style={{ marginTop: 8, fontSize: 12, color: '#666' }}>
+              Accepted domains: {result.allowedDomains.join(', ')}
+            </div>
+          )}
         </div>
       )}
-
       {error && <div className="result-box error" style={{ marginTop: 12 }}>{error}</div>}
-
-      {domains.length > 0 && (
-        <details style={{ marginTop: 12, fontSize: 12, color: '#888' }}>
-          <summary style={{ cursor: 'pointer' }}>Accepted university domains</summary>
-          <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {domains.map(d => (
-              <span key={d} style={{ background: '#f0f0f0', padding: '2px 8px', borderRadius: 12, fontSize: 11 }}>
-                {d}
-              </span>
-            ))}
-          </div>
-        </details>
-      )}
     </div>
   );
 }
@@ -293,9 +245,10 @@ function SignVerifyTool({ user }) {
     try {
       const data = await identityManager.signMessage(user.exportedKey, message);
       setSignResult(data);
-      const sig = typeof data.signature === 'object' ? JSON.stringify(data.signature) : data.signature;
+      // Signature may contain nested objects — stringify safely
+      const sig = typeof data.signature === 'object' ? JSON.stringify(data.signature) : String(data.signature);
       setSignature(sig);
-      setPubKey(user.publicKey);
+      setPubKey(typeof user.publicKey === 'object' ? JSON.stringify(user.publicKey) : String(user.publicKey));
     } catch (err) { setError(err.message); }
   };
 
@@ -318,7 +271,14 @@ function SignVerifyTool({ user }) {
         <input type="text" value={message} onChange={e => setMessage(e.target.value)} placeholder="Type any message..." />
       </div>
       <button className="btn btn-primary" onClick={handleSign} disabled={!message}>Sign with My Key</button>
-      {signResult && <div className="result-box success">Signature: {typeof signResult.signature === 'object' ? JSON.stringify(signResult.signature) : signResult.signature}</div>}
+      {signResult && (
+        <div className="result-box success" style={{ wordBreak: 'break-all' }}>
+          <strong>Signature:</strong>
+          <pre style={{ margin: '8px 0 0', whiteSpace: 'pre-wrap', fontSize: 11 }}>
+            {typeof signResult.signature === 'object' ? JSON.stringify(signResult.signature, null, 2) : signResult.signature}
+          </pre>
+        </div>
+      )}
 
       <div style={{ marginTop: 20 }}>
         <div className="grid-2">
@@ -345,7 +305,7 @@ function SignVerifyTool({ user }) {
   );
 }
 
-/* ── Raw Email Verification (advanced — .eml file) ────────── */
+/* ── Raw Email Verification (advanced) ────────────────────── */
 function RawEmailVerifyTool() {
   const [emlContent, setEmlContent] = useState('');
   const [result, setResult] = useState(null);
@@ -361,9 +321,9 @@ function RawEmailVerifyTool() {
 
   return (
     <div>
-      <h4 style={{ marginBottom: 8 }}>Raw .eml Email Verification</h4>
+      <h4 style={{ marginBottom: 8 }}>Raw Email Verification (ZK-Email)</h4>
       <p className="hint" style={{ marginBottom: 16 }}>
-        Advanced: Paste raw .eml content for full DKIM signature verification (ZK-Email).
+        Advanced: Paste a raw .eml file to prove campus email ownership via DKIM signature.
       </p>
       <div className="form-group">
         <label>Raw Email Content (.eml)</label>

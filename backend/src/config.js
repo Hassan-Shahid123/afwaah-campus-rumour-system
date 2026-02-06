@@ -5,7 +5,7 @@
 
 export const IDENTITY = {
   // Allowed university email domains for ZK-Email verification
-  ALLOWED_DOMAINS: ['university.edu', 'student.nust.edu.pk', 'seecs.edu.pk', 'nust.edu.pk', 'lums.edu.pk', 'giki.edu.pk', 'fast.edu.pk', 'comsats.edu.pk', 'uet.edu.pk', 'itu.edu.pk', 'harvard.edu', 'mit.edu', 'stanford.edu', 'oxford.ac.uk', 'cam.ac.uk'],
+  ALLOWED_DOMAINS: ['university.edu', 'student.nust.edu.pk', 'seecs.edu.pk'],
   // Trusted admin domains (for official proof injection)
   ADMIN_DOMAINS: ['admin.university.edu'],
   // Accept last N Merkle roots (allows for propagation delay)

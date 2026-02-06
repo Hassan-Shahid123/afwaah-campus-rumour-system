@@ -29,10 +29,10 @@ export const identityManager = {
 };
 
 export const emailVerifier = {
-  checkDomain: (email) =>
-    request('/identity/check-domain', { method: 'POST', body: JSON.stringify({ email }) }),
   verifyEmail: (emlContent) =>
     request('/identity/verify-email', { method: 'POST', body: JSON.stringify({ emlContent }) }),
+  checkEmail: (email) =>
+    request('/identity/check-email', { method: 'POST', body: JSON.stringify({ email }) }),
   getAllowedDomains: () =>
     request('/identity/allowed-domains'),
 };

@@ -80,7 +80,9 @@ app.post('/api/identity/sign', (req, res) => {
     const { exportedKey, message } = req.body;
     const identity = identityManager.importIdentity(exportedKey);
     const signature = identityManager.signMessage(identity, message);
-    res.json({ signature: JSON.stringify(signature) });
+    // BigInt-safe serialization
+    const safe = JSON.parse(JSON.stringify(signature, (_k, v) => typeof v === 'bigint' ? v.toString() : v));
+    res.json({ signature: safe });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -112,32 +114,32 @@ app.post('/api/identity/verify-email', (req, res) => {
   }
 });
 
-// POST /api/identity/check-domain — simple email domain verification
-app.post('/api/identity/check-domain', (req, res) => {
+// GET /api/identity/allowed-domains
+app.get('/api/identity/allowed-domains', (_req, res) => {
+  res.json({ allowedDomains: IDENTITY.ALLOWED_DOMAINS });
+});
+
+// POST /api/identity/check-email — simple domain check
+app.post('/api/identity/check-email', (req, res) => {
   try {
     const { email } = req.body;
     if (!email || !email.includes('@')) {
       return res.status(400).json({ error: 'Please enter a valid email address' });
     }
     const domain = email.split('@')[1].toLowerCase();
-    const isAllowed = emailVerifier.isDomainAllowed(domain);
+    const allowed = emailVerifier.isDomainAllowed(domain);
     res.json({
       email,
       domain,
-      verified: isAllowed,
-      message: isAllowed
-        ? `✓ ${domain} is a verified university domain. You can post rumors!`
+      verified: allowed,
+      message: allowed
+        ? `✓ ${domain} is a verified university domain. You can post and vote!`
         : `✗ ${domain} is not a recognized university domain.`,
       allowedDomains: IDENTITY.ALLOWED_DOMAINS,
     });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
-});
-
-// GET /api/identity/allowed-domains
-app.get('/api/identity/allowed-domains', (_req, res) => {
-  res.json({ allowedDomains: IDENTITY.ALLOWED_DOMAINS });
 });
 
 // ╔═══════════════════════════════════════════════════════════╗
