@@ -21,3 +21,14 @@ Thumbs.db
 *.docx
 dist/
 build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+
+# Demo files
+backend/demo-*.js
