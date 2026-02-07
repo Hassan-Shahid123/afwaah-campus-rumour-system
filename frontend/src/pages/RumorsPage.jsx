@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useUser } from '../useUser';
-import { snapshotter, tombstoneManager } from '../api';
+import { snapshotter, tombstoneManager, zkProof } from '../api';
 
 export default function RumorsPage() {
   const { user } = useUser();
@@ -78,7 +78,13 @@ export default function RumorsPage() {
 
       {/* Post a new rumor */}
       {user ? (
-        <PostRumor user={user} onPosted={loadRumors} />
+        user.emailVerified ? (
+          <PostRumor user={user} onPosted={loadRumors} />
+        ) : (
+          <div className="card" style={{ textAlign: 'center', padding: '24px', color: '#888' }}>
+            &#9993; <a href="/" style={{ color: '#000', fontWeight: 600 }}>Verify your university email</a> on the Identity page before you can post rumors or vote
+          </div>
+        )
       ) : (
         <div className="card" style={{ textAlign: 'center', padding: '24px', color: '#888' }}>
           &#9670; <a href="/" style={{ color: '#000', fontWeight: 600 }}>Create an account</a> to post rumors and vote
@@ -135,19 +141,29 @@ function PostRumor({ user, onPosted }) {
     setPosting(true); setError('');
     try {
       const rumorId = `rumor_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+      // Generate ZK proof to prove group membership without revealing identity
+      let zkProofData = null;
+      try {
+        zkProofData = await zkProof.generateProof(user.exportedKey, rumorId, `post_${rumorId}`);
+      } catch (zkErr) {
+        console.warn('ZK proof generation skipped:', zkErr.message);
+      }
+
       const op = {
         type: 'RUMOR',
         payload: {
           id: rumorId,
           text: text.trim(),
           topic,
-          nullifier: user.nullifier,
+          nullifier: zkProofData ? `zk_${zkProofData.nullifier.substring(0, 16)}` : user.nullifier,
           timestamp: Date.now(),
+          zkProof: zkProofData || undefined,
         },
         timestamp: Date.now(),
       };
       await snapshotter.ingest(op);
-      await tombstoneManager.registerRumor(rumorId, user.nullifier);
+      await tombstoneManager.registerRumor(rumorId, op.payload.nullifier);
       setText('');
       onPosted();
     } catch (err) { setError(err.message); }
@@ -191,6 +207,12 @@ function RumorCard({ id, rumor, voteList, user, onVoted }) {
   const [error, setError] = useState('');
   const [showDetails, setShowDetails] = useState(false);
 
+  // BTS prediction modal state
+  const [pendingVote, setPendingVote] = useState(null); // 'TRUE' | 'FALSE' | 'UNVERIFIED' | null
+  const [predTrue, setPredTrue] = useState(50);
+  const [predFalse, setPredFalse] = useState(30);
+  const [predUnsure, setPredUnsure] = useState(20);
+
   // Count votes by type
   const voteCounts = { TRUE: 0, FALSE: 0, UNVERIFIED: 0 };
   voteList.forEach(v => {
@@ -201,30 +223,59 @@ function RumorCard({ id, rumor, voteList, user, onVoted }) {
   // Check if current user already voted
   const userVote = user ? voteList.find(v => v.nullifier === user.nullifier) : null;
 
+  // Check if this is the user's own rumor (prevent self-voting)
+  const isOwnRumor = user && rumor.nullifier === user.nullifier;
+
   const handleVote = async (voteType) => {
     if (!user || voting || userVote) return;
+    if (isOwnRumor) return;
+    if (!user.emailVerified) return;
+    // Step 1: open the BTS prediction prompt
+    setPendingVote(voteType);
+    // Set sensible defaults based on the chosen vote
+    if (voteType === 'TRUE')       { setPredTrue(60); setPredFalse(25); setPredUnsure(15); }
+    else if (voteType === 'FALSE') { setPredTrue(25); setPredFalse(60); setPredUnsure(15); }
+    else                           { setPredTrue(30); setPredFalse(30); setPredUnsure(40); }
+  };
+
+  const cancelPrediction = () => setPendingVote(null);
+
+  const submitVoteWithPrediction = async () => {
+    if (!pendingVote) return;
+    const total = predTrue + predFalse + predUnsure;
+    if (total === 0) { setError('Predictions must add up to more than 0%'); return; }
     setVoting(true); setError('');
     try {
-      // Simple prediction based on vote type
-      const predictions = {
-        TRUE: { TRUE: 0.7, FALSE: 0.2, UNVERIFIED: 0.1 },
-        FALSE: { TRUE: 0.2, FALSE: 0.7, UNVERIFIED: 0.1 },
-        UNVERIFIED: { TRUE: 0.2, FALSE: 0.2, UNVERIFIED: 0.6 },
+      // Normalize to proportions summing to 1
+      const prediction = {
+        TRUE: predTrue / total,
+        FALSE: predFalse / total,
+        UNVERIFIED: predUnsure / total,
       };
+
+      // Generate ZK proof — scope = rumorId ensures 1 vote per identity per rumor
+      let zkProofData = null;
+      try {
+        zkProofData = await zkProof.generateProof(user.exportedKey, pendingVote, `vote_${id}`);
+      } catch (zkErr) {
+        console.warn('ZK proof generation skipped:', zkErr.message);
+      }
 
       const op = {
         type: 'VOTE',
         payload: {
           rumorId: id,
-          vote: voteType,
-          nullifier: user.nullifier,
-          prediction: predictions[voteType],
+          vote: pendingVote,
+          nullifier: zkProofData ? `zk_${zkProofData.nullifier.substring(0, 16)}` : user.nullifier,
+          prediction,
           stakeAmount: 1,
           timestamp: Date.now(),
+          zkProof: zkProofData || undefined,
         },
         timestamp: Date.now(),
       };
       await snapshotter.ingest(op);
+      setPendingVote(null);
       onVoted();
     } catch (err) { setError(err.message); }
     setVoting(false);
@@ -288,6 +339,10 @@ function RumorCard({ id, rumor, voteList, user, onVoted }) {
       <div className="vote-actions">
         {userVote ? (
           <div className="already-voted">✓ You voted: <strong>{userVote.vote}</strong></div>
+        ) : isOwnRumor ? (
+          <span style={{ fontSize: 13, color: '#888' }}>You can't vote on your own post</span>
+        ) : user && !user.emailVerified ? (
+          <span style={{ fontSize: 13, color: '#888' }}>Verify your email to vote</span>
         ) : user ? (
           <>
             <button className={`vote-btn vote-btn-true ${voting ? 'disabled' : ''}`} onClick={() => handleVote('TRUE')} disabled={voting}>
@@ -308,6 +363,49 @@ function RumorCard({ id, rumor, voteList, user, onVoted }) {
           {showDetails ? 'Hide Details' : 'Details'}
         </button>
       </div>
+
+      {/* BTS Prediction Panel — appears after user selects a vote */}
+      {pendingVote && (
+        <div style={{ background: '#f0f7ff', border: '1px solid #b3d4fc', borderRadius: 8, padding: 16, marginTop: 10 }}>
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
+            Your vote: <span style={{ color: pendingVote === 'TRUE' ? '#15803d' : pendingVote === 'FALSE' ? '#dc2626' : '#a16207' }}>{pendingVote}</span>
+          </div>
+          <div style={{ fontSize: 13, color: '#555', marginBottom: 12 }}>
+            <strong>Bayesian Truth Serum:</strong> Now predict what % of <em>other voters</em> will pick each option.
+            This prediction is used to calculate your BTS score — honest predictions earn higher rewards.
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ width: 80, fontSize: 13, fontWeight: 500, color: '#15803d' }}>▲ True</span>
+              <input type="range" min={0} max={100} value={predTrue} onChange={e => setPredTrue(Number(e.target.value))} style={{ flex: 1 }} />
+              <span style={{ width: 40, textAlign: 'right', fontSize: 13, fontWeight: 600 }}>{predTrue}%</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ width: 80, fontSize: 13, fontWeight: 500, color: '#dc2626' }}>▼ False</span>
+              <input type="range" min={0} max={100} value={predFalse} onChange={e => setPredFalse(Number(e.target.value))} style={{ flex: 1 }} />
+              <span style={{ width: 40, textAlign: 'right', fontSize: 13, fontWeight: 600 }}>{predFalse}%</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ width: 80, fontSize: 13, fontWeight: 500, color: '#a16207' }}>● Unsure</span>
+              <input type="range" min={0} max={100} value={predUnsure} onChange={e => setPredUnsure(Number(e.target.value))} style={{ flex: 1 }} />
+              <span style={{ width: 40, textAlign: 'right', fontSize: 13, fontWeight: 600 }}>{predUnsure}%</span>
+            </div>
+          </div>
+          {(predTrue + predFalse + predUnsure) !== 100 && (
+            <div style={{ fontSize: 12, color: '#a16207', marginTop: 8 }}>
+              Total: {predTrue + predFalse + predUnsure}% — values will be normalized to 100%
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <button className="btn btn-primary" onClick={submitVoteWithPrediction} disabled={voting} style={{ padding: '8px 18px', fontSize: 13 }}>
+              {voting ? <><span className="spinner" /> Submitting...</> : 'Submit Vote & Prediction'}
+            </button>
+            <button className="btn btn-secondary" onClick={cancelPrediction} disabled={voting} style={{ padding: '8px 14px', fontSize: 13 }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Details (collapsed) */}
       {showDetails && (

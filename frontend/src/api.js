@@ -33,6 +33,21 @@ export const emailVerifier = {
     request('/identity/verify-email', { method: 'POST', body: JSON.stringify({ emlContent }) }),
   getAllowedDomains: () =>
     request('/identity/allowed-domains'),
+  verifyAndRegister: (emlContent, exportedKey) =>
+    request('/identity/verify-and-register', { method: 'POST', body: JSON.stringify({ emlContent, exportedKey }) }),
+  getBindings: () =>
+    request('/identity/bindings'),
+};
+
+// ── ZK Proofs ────────────────────────────────────────────────
+
+export const zkProof = {
+  generateProof: (exportedKey, message, scope) =>
+    request('/zk/generate-proof', { method: 'POST', body: JSON.stringify({ exportedKey, message, scope }) }),
+  verifyProof: (proof) =>
+    request('/zk/verify-proof', { method: 'POST', body: JSON.stringify({ proof }) }),
+  recordNullifier: (scope, nullifier) =>
+    request('/zk/record-nullifier', { method: 'POST', body: JSON.stringify({ scope, nullifier }) }),
 };
 
 // ── Membership Tree ──────────────────────────────────────────
@@ -71,6 +86,23 @@ export const rbtsEngine = {
 export const correlationDampener = {
   dampen: (votes, voteHistory) =>
     request('/scoring/dampen', { method: 'POST', body: JSON.stringify({ votes, voteHistory }) }),
+};
+
+export const scoreFinalization = {
+  finalize: (rumorId) =>
+    request('/scoring/finalize', { method: 'POST', body: JSON.stringify({ rumorId }) }),
+  getFinalized: (rumorId) =>
+    request(`/scoring/finalized/${encodeURIComponent(rumorId)}`),
+  getAllFinalized: () =>
+    request('/scoring/finalized-all'),
+};
+
+// ── P2P Network ──────────────────────────────────────────────
+
+export const network = {
+  getStatus: () => request('/network/status'),
+  getPeers: () => request('/network/peers'),
+  getTopics: () => request('/network/topics'),
 };
 
 // ── Reputation ───────────────────────────────────────────────

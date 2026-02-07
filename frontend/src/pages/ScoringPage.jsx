@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useUser } from '../useUser';
-import { btsEngine, rbtsEngine, correlationDampener, reputationManager, trustPropagator } from '../api';
+import { btsEngine, rbtsEngine, correlationDampener, reputationManager, trustPropagator, scoreFinalization } from '../api';
 
 export default function ScoringPage() {
   const { user } = useUser();
@@ -134,6 +134,8 @@ function AdvancedScoringTools() {
 
       {expanded && (
         <div style={{ marginTop: 20 }}>
+          <ScoreFinalizationTool />
+          <div className="divider" />
           <RegisterUserTool />
           <div className="divider" />
           <LookupUserTool />
@@ -577,6 +579,73 @@ function TrustPropagatorTool() {
       {graphResult && <div className="result-box success">{JSON.stringify(graphResult, null, 2)}</div>}
       {pprResult && <div className="result-box success">{JSON.stringify(pprResult, null, 2)}</div>}
       {error && <div className="result-box error">{error}</div>}
+    </div>
+  );
+}
+
+/* ── Score Finalization ────────────────────────────────────── */
+function ScoreFinalizationTool() {
+  const [rumorId, setRumorId] = useState('');
+  const [result, setResult] = useState(null);
+  const [allFinalized, setAllFinalized] = useState(null);
+  const [error, setError] = useState('');
+
+  const handleFinalize = async () => {
+    setError('');
+    try { setResult(await scoreFinalization.finalize(rumorId)); }
+    catch (err) { setError(err.message); }
+  };
+
+  const handleCheck = async () => {
+    setError('');
+    try { setResult(await scoreFinalization.getFinalized(rumorId)); }
+    catch (err) { setError(err.message); }
+  };
+
+  const handleGetAll = async () => {
+    setError('');
+    try { setAllFinalized(await scoreFinalization.getAllFinalized()); }
+    catch (err) { setError(err.message); }
+  };
+
+  return (
+    <div>
+      <h4 style={{ marginBottom: 8 }}>Score Finalization (Lock Scores)</h4>
+      <p className="hint" style={{ marginBottom: 12 }}>
+        Freeze a settled rumor's score so it cannot drift via reputation decay.
+        Finalized scores are permanently locked.
+      </p>
+      <div className="form-group">
+        <label>Rumor ID</label>
+        <input type="text" value={rumorId} onChange={e => setRumorId(e.target.value)} placeholder="e.g. rumor_1700000000000_abc" />
+      </div>
+      <div className="btn-group">
+        <button className="btn btn-primary" onClick={handleFinalize} disabled={!rumorId}>🔒 Finalize Score</button>
+        <button className="btn btn-secondary" onClick={handleCheck} disabled={!rumorId}>Check Status</button>
+        <button className="btn btn-secondary" onClick={handleGetAll}>View All Finalized</button>
+      </div>
+      {result && (
+        <div className={`result-box ${result.locked ? 'success' : ''}`} style={{ marginTop: 8 }}>
+          {result.locked ? (
+            <div>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>🔒 Score Locked</div>
+              <div>Score: {typeof result.score === 'number' ? result.score.toFixed(1) : result.score}</div>
+              <div>Consensus: {result.consensus}</div>
+              <div>Voters: {result.voterCount}</div>
+              <div>Finalized at: {new Date(result.finalizedAt).toLocaleString()}</div>
+            </div>
+          ) : (
+            <div>{result.finalized === false ? 'Not yet finalized' : JSON.stringify(result, null, 2)}</div>
+          )}
+        </div>
+      )}
+      {allFinalized && (
+        <div className="result-box success" style={{ marginTop: 8 }}>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>{allFinalized.count} finalized score(s)</div>
+          <pre style={{ fontSize: 11, maxHeight: 200, overflow: 'auto' }}>{JSON.stringify(allFinalized.scores, null, 2)}</pre>
+        </div>
+      )}
+      {error && <div className="result-box error" style={{ marginTop: 8 }}>{error}</div>}
     </div>
   );
 }

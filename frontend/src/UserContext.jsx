@@ -92,12 +92,16 @@ export function UserProvider({ children }) {
     }
   };
 
+  const updateUser = (fields) => {
+    setUser(prev => prev ? { ...prev, ...fields } : prev);
+  };
+
   const logout = () => {
     setUser(null);
   };
 
   return (
-    <UserContext.Provider value={{ user, loading, createAccount, restoreAccount, logout }}>
+    <UserContext.Provider value={{ user, loading, createAccount, restoreAccount, updateUser, logout }}>
       {children}
     </UserContext.Provider>
   );

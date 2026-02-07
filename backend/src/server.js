@@ -20,6 +20,9 @@ import { TombstoneManager } from './state/tombstone-manager.js';
 import {
   IDENTITY, SCORING, PROTOCOL, NETWORK, STORAGE, MAX_RUMOR_LENGTH,
 } from './config.js';
+import { generateProof, verifyProof } from '@semaphore-protocol/proof';
+import { AfwaahNode } from './network/node.js';
+import { GossipController } from './network/gossip-controller.js';
 
 // ── Instantiate singletons ───────────────────────────────────
 const identityManager = new IdentityManager();
@@ -32,6 +35,111 @@ const reputationManager = new ReputationManager();
 const trustPropagator = new TrustPropagator();
 const snapshotter = new Snapshotter();
 const tombstoneManager = new TombstoneManager();
+
+// ── ZK Proof State ───────────────────────────────────────────
+const usedNullifiers = new Map();   // scope → Set<nullifier>
+
+// ── DKIM-to-Commitment Binding ───────────────────────────────
+const verifiedEmailBindings = new Map();  // email → commitment
+
+// ── Score Finalization ───────────────────────────────────────
+const finalizedScores = new Map();  // rumorId → { score, consensus, ... }
+
+// ── P2P Network ─────────────────────────────────────────────
+let p2pNode = null;
+let gossipController = null;
+let p2pStatus = { started: false, peerId: null, peers: 0, error: null };
+
+/**
+ * Convert an arbitrary string to a field element (bigint string)
+ * for use as ZK proof message/scope parameters.
+ */
+function hashToField(str) {
+  let hash = 0n;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5n) - hash + BigInt(str.charCodeAt(i))) & ((1n << 250n) - 1n);
+  }
+  return hash.toString();
+}
+
+/**
+ * Start the libp2p P2P node in the background.
+ * Non-blocking — if P2P fails, the server continues in centralized mode.
+ */
+async function startP2P() {
+  try {
+    p2pNode = new AfwaahNode();
+    await p2pNode.start();
+
+    gossipController = new GossipController(p2pNode);
+    gossipController.start();
+
+    // Bridge incoming gossip messages → snapshotter
+    gossipController.onRumor((msg) => {
+      try { snapshotter.ingest({ type: 'RUMOR', payload: msg.payload, timestamp: msg.timestamp }); } catch {}
+    });
+    gossipController.onVote((msg) => {
+      try { snapshotter.ingest({ type: 'VOTE', payload: msg.payload, timestamp: msg.timestamp }); } catch {}
+    });
+    gossipController.onTombstone((msg) => {
+      try { snapshotter.ingest({ type: 'TOMBSTONE', payload: msg.payload, timestamp: msg.timestamp }); } catch {}
+    });
+    gossipController.onJoin((msg) => {
+      try { snapshotter.ingest({ type: 'JOIN', payload: msg.payload, timestamp: msg.timestamp }); } catch {}
+    });
+
+    p2pStatus = {
+      started: true,
+      peerId: p2pNode.peerId.toString(),
+      peers: p2pNode.getConnectedPeers().length,
+      multiaddrs: p2pNode.getMultiaddrs().map(ma => ma.toString()),
+      error: null,
+    };
+
+    setInterval(() => {
+      if (p2pNode?.isStarted) {
+        p2pStatus.peers = p2pNode.getConnectedPeers().length;
+      }
+    }, 5000);
+
+    console.log(`  P2P node started: ${p2pStatus.peerId}`);
+  } catch (err) {
+    p2pStatus = { started: false, peerId: null, peers: 0, error: err.message };
+    console.warn(`  P2P not available: ${err.message} (running in centralized mode)`);
+  }
+}
+
+/**
+ * Auto-trigger BTS/RBTS scoring pipeline after a vote is ingested.
+ */
+function autoScoreRumor(rumorId) {
+  if (finalizedScores.has(rumorId)) return null;
+
+  const votes = snapshotter.getVotesForRumor(rumorId);
+  if (!votes || votes.length < 3) return null;
+
+  try {
+    const dampenedVotes = correlationDampener.dampen(votes, new Map());
+    const engine = dampenedVotes.length >= SCORING.RBTS_THRESHOLD ? btsEngine : rbtsEngine;
+    const result = dampenedVotes.length >= SCORING.RBTS_THRESHOLD
+      ? engine.calculate(dampenedVotes)
+      : engine.calculate(dampenedVotes, rumorId, 0);
+
+    if (result.voterScores.size > 0) {
+      reputationManager.applyScores(result, rumorId);
+    }
+
+    return {
+      triggered: true,
+      rumorId,
+      voterCount: dampenedVotes.length,
+      consensus: result.consensus,
+      rumorTrustScore: result.rumorTrustScore,
+    };
+  } catch (err) {
+    return { triggered: false, error: err.message };
+  }
+}
 
 // ── Express App ──────────────────────────────────────────────
 const app = express();
@@ -173,6 +281,174 @@ app.post('/api/identity/verify-email', async (req, res) => {
 // GET /api/identity/allowed-domains
 app.get('/api/identity/allowed-domains', (_req, res) => {
   res.json({ allowedDomains: IDENTITY.ALLOWED_DOMAINS });
+});
+
+// ╔═══════════════════════════════════════════════════════════╗
+// ║  DKIM-TO-COMMITMENT BINDING                               ║
+// ║  Cryptographically links email verification to identity   ║
+// ╚═══════════════════════════════════════════════════════════╝
+
+// POST /api/identity/verify-and-register
+// Combined: DKIM-verify email + bind to identity + add to membership tree
+app.post('/api/identity/verify-and-register', async (req, res) => {
+  try {
+    const { emlContent, exportedKey } = req.body;
+    if (!emlContent || !exportedKey) {
+      return res.status(400).json({ error: 'Both emlContent and exportedKey are required' });
+    }
+
+    // Step 1: Cryptographically verify the email via DKIM
+    const dkimResult = await emailVerifier.verifyEmail(emlContent);
+
+    // Step 2: Derive the binding key from the verified inbox email
+    const emailKey = dkimResult.deliveredTo.toLowerCase();
+
+    // Step 3: Check if this email has already been used (1 email = 1 identity)
+    if (verifiedEmailBindings.has(emailKey)) {
+      return res.status(409).json({
+        error: `This university email (${emailKey}) has already been used to register an identity. One email = one anonymous identity.`,
+        existingCommitment: verifiedEmailBindings.get(emailKey),
+      });
+    }
+
+    // Step 4: Reconstruct the identity and get commitment
+    const identity = identityManager.importIdentity(exportedKey);
+    const commitment = identityManager.getCommitment(identity);
+
+    // Step 5: Add to membership tree (or reuse existing member)
+    let memberIndex = membershipTree.indexOf(commitment);
+    if (memberIndex === -1) {
+      memberIndex = membershipTree.addMember(commitment);
+    }
+
+    // Step 6: Store the cryptographic binding: email → commitment
+    verifiedEmailBindings.set(emailKey, commitment.toString());
+
+    // Step 7: Register in reputation system
+    const nullifier = `user_${commitment.toString().substring(0, 12)}`;
+    reputationManager.register(nullifier);
+
+    // Step 8: Record JOIN in the snapshotter opLog
+    snapshotter.ingest({
+      type: 'JOIN',
+      payload: {
+        commitment: commitment.toString(),
+        nullifier,
+        emailDomain: dkimResult.domain,
+        emailVerified: true,
+        dkimBinding: { email: emailKey, bodyHash: dkimResult.bodyHash },
+        timestamp: Date.now(),
+      },
+      timestamp: Date.now(),
+    });
+
+    // Broadcast via P2P if available
+    if (gossipController && p2pNode?.isStarted) {
+      gossipController.publishJoin({ commitment: commitment.toString(), nullifier }).catch(() => {});
+    }
+
+    res.json({
+      success: true,
+      email: emailKey,
+      commitment: commitment.toString(),
+      memberIndex,
+      dkimResult,
+      binding: { email: emailKey, commitment: commitment.toString(), bodyHash: dkimResult.bodyHash },
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// GET /api/identity/bindings — list all email-to-commitment bindings
+app.get('/api/identity/bindings', (_req, res) => {
+  const bindings = {};
+  for (const [email, commitment] of verifiedEmailBindings) {
+    bindings[email] = commitment;
+  }
+  res.json({ bindings, count: verifiedEmailBindings.size });
+});
+
+// ╔═══════════════════════════════════════════════════════════╗
+// ║  ZK PROOF ENDPOINTS                                       ║
+// ║  Generate and verify Semaphore V4 zero-knowledge proofs   ║
+// ╚═══════════════════════════════════════════════════════════╝
+
+// POST /api/zk/generate-proof
+app.post('/api/zk/generate-proof', async (req, res) => {
+  try {
+    const { exportedKey, message, scope } = req.body;
+    if (!exportedKey || message === undefined || scope === undefined) {
+      return res.status(400).json({ error: 'exportedKey, message, and scope are required' });
+    }
+
+    const identity = identityManager.importIdentity(exportedKey);
+    const group = membershipTree.getGroup();
+
+    if (group.size === 0) {
+      return res.status(400).json({ error: 'No members in the group yet. Register your identity first.' });
+    }
+
+    // Convert string-based message/scope to field elements
+    const msgField = typeof message === 'string' && !/^\d+$/.test(message)
+      ? hashToField(message) : message.toString();
+    const scopeField = typeof scope === 'string' && !/^\d+$/.test(scope)
+      ? hashToField(scope) : scope.toString();
+
+    const proof = await generateProof(identity, group, msgField, scopeField);
+
+    // Serialize proof (BigInts → strings)
+    res.json({
+      merkleTreeDepth: proof.merkleTreeDepth,
+      merkleTreeRoot: proof.merkleTreeRoot.toString(),
+      nullifier: proof.nullifier.toString(),
+      message: proof.message.toString(),
+      scope: proof.scope.toString(),
+      points: proof.points,
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/zk/verify-proof
+app.post('/api/zk/verify-proof', async (req, res) => {
+  try {
+    const { proof } = req.body;
+    if (!proof) {
+      return res.status(400).json({ error: 'proof object is required' });
+    }
+
+    const isValid = await verifyProof(proof);
+
+    // Check nullifier uniqueness for the given scope
+    const scope = proof.scope?.toString() || '';
+    const nullifier = proof.nullifier?.toString() || '';
+    let isNullifierNew = true;
+
+    if (scope && nullifier) {
+      if (!usedNullifiers.has(scope)) usedNullifiers.set(scope, new Set());
+      isNullifierNew = !usedNullifiers.get(scope).has(nullifier);
+    }
+
+    res.json({ valid: isValid, nullifier, isNullifierNew });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/zk/record-nullifier — mark a nullifier as used for a scope
+app.post('/api/zk/record-nullifier', (req, res) => {
+  try {
+    const { scope, nullifier } = req.body;
+    const s = scope?.toString() || '';
+    const n = nullifier?.toString() || '';
+    if (!usedNullifiers.has(s)) usedNullifiers.set(s, new Set());
+    usedNullifiers.get(s).add(n);
+    res.json({ recorded: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // ╔═══════════════════════════════════════════════════════════╗
@@ -342,6 +618,64 @@ app.post('/api/scoring/dampen', (req, res) => {
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
+});
+
+// ╔═══════════════════════════════════════════════════════════╗
+// ║  SCORE FINALIZATION ENDPOINTS                             ║
+// ║  Freeze a rumor's score so decay cannot drift it          ║
+// ╚═══════════════════════════════════════════════════════════╝
+
+// POST /api/scoring/finalize — lock a rumor's score permanently
+app.post('/api/scoring/finalize', (req, res) => {
+  try {
+    const { rumorId } = req.body;
+    if (!rumorId) return res.status(400).json({ error: 'rumorId is required' });
+
+    if (finalizedScores.has(rumorId)) {
+      return res.status(409).json({ error: 'Score already finalized', finalized: finalizedScores.get(rumorId) });
+    }
+
+    const votes = snapshotter.getVotesForRumor(rumorId);
+    if (!votes || votes.length === 0) {
+      return res.status(400).json({ error: 'No votes found for this rumor' });
+    }
+
+    // Run the full scoring pipeline one final time
+    const dampenedVotes = correlationDampener.dampen(votes, new Map());
+    const engine = dampenedVotes.length >= SCORING.RBTS_THRESHOLD ? btsEngine : rbtsEngine;
+    const result = dampenedVotes.length >= SCORING.RBTS_THRESHOLD
+      ? engine.calculate(dampenedVotes)
+      : engine.calculate(dampenedVotes, rumorId, 0);
+
+    const finalized = {
+      rumorId,
+      score: result.rumorTrustScore,
+      consensus: result.consensus,
+      actualProportions: result.actualProportions,
+      voterCount: votes.length,
+      finalizedAt: Date.now(),
+      locked: true,
+    };
+
+    finalizedScores.set(rumorId, finalized);
+    res.json(finalized);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// GET /api/scoring/finalized/:rumorId
+app.get('/api/scoring/finalized/:rumorId', (req, res) => {
+  const finalized = finalizedScores.get(req.params.rumorId);
+  if (!finalized) return res.json({ finalized: false });
+  res.json({ finalized: true, ...finalized });
+});
+
+// GET /api/scoring/finalized-all
+app.get('/api/scoring/finalized-all', (_req, res) => {
+  const all = {};
+  for (const [k, v] of finalizedScores) all[k] = v;
+  res.json({ scores: all, count: finalizedScores.size });
 });
 
 // ╔═══════════════════════════════════════════════════════════╗
@@ -560,19 +894,116 @@ app.post('/api/trust/compute-ppr', (req, res) => {
 });
 
 // ╔═══════════════════════════════════════════════════════════╗
+// ║  P2P NETWORK ENDPOINTS                                    ║
+// ╚═══════════════════════════════════════════════════════════╝
+
+// GET /api/network/status — live P2P node status
+app.get('/api/network/status', (_req, res) => {
+  if (p2pNode && p2pNode.isStarted) {
+    p2pStatus.peers = p2pNode.getConnectedPeers().length;
+    try { p2pStatus.multiaddrs = p2pNode.getMultiaddrs().map(ma => ma.toString()); } catch {}
+  }
+  res.json(p2pStatus);
+});
+
+// GET /api/network/peers — list connected peers
+app.get('/api/network/peers', (_req, res) => {
+  if (!p2pNode || !p2pNode.isStarted) {
+    return res.json({ peers: [], count: 0 });
+  }
+  const peers = p2pNode.getConnectedPeers().map(p => p.toString());
+  res.json({ peers, count: peers.length });
+});
+
+// GET /api/network/topics — list subscribed gossip topics
+app.get('/api/network/topics', (_req, res) => {
+  res.json({ topics: PROTOCOL.TOPICS });
+});
+
+// ╔═══════════════════════════════════════════════════════════╗
 // ║  SNAPSHOTTER ENDPOINTS                                    ║
 // ╚═══════════════════════════════════════════════════════════╝
 
-// POST /api/state/ingest
-app.post('/api/state/ingest', (req, res) => {
+// POST /api/state/ingest — enhanced with ZK verification, auto-scoring, P2P broadcast
+app.post('/api/state/ingest', async (req, res) => {
   try {
     const { op } = req.body;
+    const responseData = {};
+
+    // ── ZK Proof verification (if included) ──────────────────
+    if (op.payload?.zkProof) {
+      const proof = op.payload.zkProof;
+      try {
+        const isValid = await verifyProof(proof);
+        if (!isValid) {
+          return res.status(400).json({ error: 'Invalid ZK proof — membership not verified' });
+        }
+
+        // Check and record nullifier to prevent double-action
+        const scope = proof.scope?.toString() || '';
+        const nullifier = proof.nullifier?.toString() || '';
+        if (scope && nullifier) {
+          if (!usedNullifiers.has(scope)) usedNullifiers.set(scope, new Set());
+          if (usedNullifiers.get(scope).has(nullifier)) {
+            return res.status(400).json({ error: 'Duplicate action — this nullifier was already used for this scope' });
+          }
+          usedNullifiers.get(scope).add(nullifier);
+        }
+
+        // Use the ZK proof nullifier as the verified anonymous identifier
+        op.payload.nullifier = `zk_${nullifier.substring(0, 16)}`;
+        op.payload.zkVerified = true;
+        responseData.zkVerified = true;
+        responseData.zkNullifier = op.payload.nullifier;
+      } catch (zkErr) {
+        // ZK verification error — allow operation to proceed without ZK
+        responseData.zkError = zkErr.message;
+      }
+    }
+
+    // ── Server-side validation ────────────────────────────────
+    if (op.type === 'VOTE' && op.payload?.rumorId) {
+      // Prevent self-voting: check if this user authored the rumor
+      const rumorData = snapshotter.getRumor(op.payload.rumorId);
+      if (rumorData && op.payload.nullifier && rumorData.nullifier === op.payload.nullifier) {
+        return res.status(403).json({ error: 'You cannot vote on your own rumor' });
+      }
+
+      // Prevent duplicate voting on the same rumor
+      const existingVotes = snapshotter.getVotesForRumor(op.payload.rumorId);
+      if (op.payload.nullifier && existingVotes.some(v => v.nullifier === op.payload.nullifier)) {
+        return res.status(409).json({ error: 'You have already voted on this rumor' });
+      }
+    }
+
+    // ── Ingest the operation ─────────────────────────────────
     const snapshot = snapshotter.ingest(op);
+
+    // ── Auto-trigger scoring pipeline on new votes (Fix 6) ───
+    if (op.type === 'VOTE' && op.payload?.rumorId) {
+      const scoringResult = autoScoreRumor(op.payload.rumorId);
+      if (scoringResult) responseData.autoScoring = scoringResult;
+    }
+
+    // ── Broadcast via P2P gossip if available (Fix 2) ────────
+    if (gossipController && p2pNode?.isStarted) {
+      try {
+        if (op.type === 'RUMOR') await gossipController.publishRumor(op.payload);
+        else if (op.type === 'VOTE') await gossipController.publishVote(op.payload);
+        else if (op.type === 'TOMBSTONE') await gossipController.publishTombstone(op.payload);
+        else if (op.type === 'JOIN') await gossipController.publishJoin(op.payload);
+        responseData.p2pBroadcast = true;
+      } catch (p2pErr) {
+        responseData.p2pBroadcast = false;
+      }
+    }
+
     res.json({
       snapshotTriggered: !!snapshot,
       snapshot: snapshot || null,
       opsSinceSnapshot: snapshotter.opsSinceSnapshot,
       snapshotCount: snapshotter.snapshotCount,
+      ...responseData,
     });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -805,6 +1236,9 @@ app.listen(PORT, () => {
   console.log(`\n  ┌─────────────────────────────────────────┐`);
   console.log(`  │  Afwaah API Server running on port ${PORT}  │`);
   console.log(`  └─────────────────────────────────────────┘\n`);
+
+  // Start P2P node in background (non-blocking — server works without it)
+  startP2P();
 });
 
 export default app;

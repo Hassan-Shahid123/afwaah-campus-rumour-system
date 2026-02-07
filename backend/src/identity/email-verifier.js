@@ -14,11 +14,19 @@
 // If ANYONE edits even one character of the From/To/Subject/body,
 // the cryptographic signature FAILS — this cannot be faked.
 //
+// IMPORTANT: The Delivered-To header is NOT DKIM-signed (it's added
+// by the receiving server after DKIM is applied by the sender).
+// Therefore we cross-validate it against:
+//   - Received: headers (which contain "for <recipient>")
+//   - The signed To:/Cc: headers (for non-mailing-list emails)
+//
 // Security layers:
 //   LAYER 1: DKIM crypto verification (proves headers not tampered)
 //   LAYER 2: DKIM signing domain must be an allowed university domain
-//   LAYER 3: Delivered-To must be an allowed university inbox
-//            (proves WHO downloaded this .eml)
+//   LAYER 3: Delivered-To must match the Received "for <>" recipient
+//            AND must be an allowed university inbox.
+//            Cross-validates unsigned headers against each other to
+//            detect manual tampering.
 // ─────────────────────────────────────────────────────────────
 
 import { simpleParser } from 'mailparser';
@@ -120,7 +128,10 @@ export class EmailVerifier {
     const parsed = await simpleParser(raw);
 
     // ─── Extract Delivered-To (the inbox this .eml was downloaded from) ───
+    // WARNING: Delivered-To is NOT DKIM-signed. Cross-validate it.
     const deliveredTo = this._extractDeliveredTo(raw);
+    const receivedForAddresses = this._extractReceivedForAddresses(raw);
+    const recipientCrossCheck = this._crossValidateRecipient(deliveredTo, receivedForAddresses);
 
     // Extract the sender (From) for display
     const fromAddress = parsed.from?.value?.[0]?.address;
@@ -181,11 +192,13 @@ export class EmailVerifier {
     // CHECK 3: DKIM signature must CRYPTOGRAPHICALLY pass
     const dkimCryptoValid = dkimStatus === 'pass';
 
-    // ALL THREE checks must pass:
+    // ALL FOUR checks must pass:
     // 1. Delivered-To is a university inbox (proves who downloaded it)
     // 2. DKIM signing domain is a university domain
     // 3. DKIM signature cryptographically verifies (proves headers were NOT edited)
-    const isValid = recipientValid && dkimDomainValid && dkimCryptoValid;
+    // 4. Delivered-To cross-validates against Received "for <>" headers
+    //    (catches manual Delivered-To tampering — since DKIM doesn't sign it)
+    const isValid = recipientValid && dkimDomainValid && dkimCryptoValid && recipientCrossCheck.consistent;
 
     return {
       domain: recipientDomain || fromAddress.split('@')[1]?.toLowerCase() || '',
@@ -199,6 +212,8 @@ export class EmailVerifier {
       signingDomain,
       dkimStatus,
       dkimInfo,
+      recipientCrossCheck,       // expose cross-validation details
+      receivedForAddresses,      // expose all Received "for <>" addresses
     };
   }
 
@@ -252,6 +267,15 @@ export class EmailVerifier {
       errors.push('E003: No sender address found');
     }
 
+    // CHECK: Cross-validate Delivered-To against Received "for <>" headers
+    // The Delivered-To header is NOT DKIM-signed (added by receiving server),
+    // so an attacker can freely edit it. We cross-check it against Received
+    // "for <recipient>" headers which are also added during transit — if they
+    // don't match, the Delivered-To has been tampered with.
+    if (dkimResult.recipientCrossCheck && !dkimResult.recipientCrossCheck.consistent) {
+      errors.push(`E009: ${dkimResult.recipientCrossCheck.details}`);
+    }
+
     return {
       valid: errors.length === 0,
       errors,
@@ -291,6 +315,11 @@ export class EmailVerifier {
   /**
    * Extract the Delivered-To address from raw email headers.
    * This tells us whose inbox the .eml was downloaded from.
+   * 
+   * WARNING: This header is NOT DKIM-signed. It is added by the
+   * receiving server AFTER the DKIM signature is applied. It can
+   * be freely edited without breaking DKIM verification. We
+   * cross-validate it against Received "for <>" headers.
    * @private
    */
   _extractDeliveredTo(rawEmail) {
@@ -299,6 +328,59 @@ export class EmailVerifier {
       return match[1].trim().toLowerCase();
     }
     return '';
+  }
+
+  /**
+   * Extract ALL recipient addresses from Received "for <email>" headers.
+   * These headers are also unsigned but are added by mail servers during
+   * transit. Cross-checking Delivered-To against these catches manual edits
+   * because an attacker would need to edit ALL of them consistently.
+   * @private
+   */
+  _extractReceivedForAddresses(rawEmail) {
+    const addresses = [];
+    // Match "for <email@domain>" patterns in Received: headers
+    const regex = /^Received:[\s\S]*?for\s+<([^>]+)>/gim;
+    let match;
+    while ((match = regex.exec(rawEmail)) !== null) {
+      addresses.push(match[1].trim().toLowerCase());
+    }
+    return [...new Set(addresses)]; // deduplicate
+  }
+
+  /**
+   * Cross-validate the Delivered-To header against Received "for <>" headers.
+   * Since DKIM does NOT sign Delivered-To (it's added by the receiving server),
+   * this cross-validation detects manual tampering: if someone edits only the
+   * Delivered-To line but forgets (or can't easily find) the Received headers,
+   * the mismatch will be caught.
+   * 
+   * @private
+   * @param {string} deliveredTo - The Delivered-To address
+   * @param {string[]} receivedForAddresses - Addresses from Received "for <>" headers
+   * @returns {{ consistent: boolean, details: string }}
+   */
+  _crossValidateRecipient(deliveredTo, receivedForAddresses) {
+    if (!deliveredTo) {
+      return { consistent: false, details: 'No Delivered-To header found' };
+    }
+    if (receivedForAddresses.length === 0) {
+      // Some emails don't have "for <>" in Received headers — allow but warn
+      return { consistent: true, details: 'No Received "for" headers to cross-check (allowed)' };
+    }
+
+    // The Delivered-To address should match at least one Received "for <>" address
+    const deliveredToLower = deliveredTo.toLowerCase();
+    const matchesAny = receivedForAddresses.some(addr => addr === deliveredToLower);
+
+    if (matchesAny) {
+      return { consistent: true, details: 'Delivered-To matches Received header' };
+    }
+
+    return {
+      consistent: false,
+      details: `Delivered-To "${deliveredTo}" does NOT match any Received "for" header: [${receivedForAddresses.join(', ')}]. The Delivered-To header appears to have been manually edited.`,
+    };
   }
 
   /**

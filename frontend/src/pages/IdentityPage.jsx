@@ -3,7 +3,7 @@ import { useUser } from '../useUser';
 import { identityManager, emailVerifier, membershipTree } from '../api';
 
 export default function IdentityPage() {
-  const { user, loading, createAccount, restoreAccount, logout } = useUser();
+  const { user, loading, createAccount, restoreAccount, updateUser, logout } = useUser();
 
   return (
     <div>
@@ -17,7 +17,7 @@ export default function IdentityPage() {
       ) : (
         <>
           <AccountCard user={user} logout={logout} />
-          <EmailVerifyCard />
+          <EmailVerifyCard user={user} updateUser={updateUser} />
           <SignVerifyCard user={user} />
           <AdvancedSection />
         </>
@@ -150,16 +150,31 @@ function AccountCard({ user, logout }) {
 }
 
 /* ── Email Verification (.eml) — main card ────────────────── */
-function EmailVerifyCard() {
+function EmailVerifyCard({ user, updateUser }) {
   const [emlContent, setEmlContent] = useState('');
   const [result, setResult] = useState(null);
+  const [bindingResult, setBindingResult] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleVerify = async () => {
-    setLoading(true); setError(''); setResult(null);
+    setLoading(true); setError(''); setResult(null); setBindingResult(null);
     try { setResult(await emailVerifier.verifyEmail(emlContent)); }
     catch (err) { setError(err.message); }
+    setLoading(false);
+  };
+
+  // Combined: verify DKIM + bind email to identity commitment (1 email = 1 identity)
+  const handleVerifyAndBind = async () => {
+    if (!user?.exportedKey) { setError('No account found. Create an account first.'); return; }
+    setLoading(true); setError(''); setResult(null); setBindingResult(null);
+    try {
+      const data = await emailVerifier.verifyAndRegister(emlContent, user.exportedKey);
+      setResult(data.dkimResult);
+      setBindingResult(data.binding);
+      // Mark user as email-verified so they can post and vote
+      updateUser({ emailVerified: true, verifiedEmail: data.binding?.email });
+    } catch (err) { setError(err.message); }
     setLoading(false);
   };
 
@@ -231,11 +246,30 @@ function EmailVerifyCard() {
           placeholder={'Paste the entire raw .eml content here...\n\nIt starts with headers like:\nFrom: yourname@seecs.edu.pk\nDKIM-Signature: v=1; a=rsa-sha256; d=seecs.edu.pk; ...'}
           style={{ fontFamily: 'monospace', fontSize: 12 }} />
       </div>
-      <button className="btn btn-primary" onClick={handleVerify} disabled={loading || !emlContent}>
-        {loading ? <><span className="spinner" /> Verifying...</> : 'Verify Email'}
-      </button>
+      <div className="btn-group">
+        <button className="btn btn-primary" onClick={handleVerifyAndBind} disabled={loading || !emlContent}>
+          {loading ? <><span className="spinner" /> Verifying...</> : '🔗 Verify & Bind to My Identity'}
+        </button>
+        <button className="btn btn-secondary" onClick={handleVerify} disabled={loading || !emlContent}>
+          Verify Only
+        </button>
+      </div>
 
-      {result && (
+      {bindingResult && (
+        <div className="result-box success" style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>🔗 Email → Identity Bound!</div>
+          <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+            <div><strong>Email:</strong> {bindingResult.email}</div>
+            <div><strong>Commitment:</strong> <span className="mono" style={{ fontSize: 11 }}>{bindingResult.commitment}</span></div>
+            <div style={{ marginTop: 8, padding: '8px 10px', background: '#e8f5e9', borderRadius: 4, fontSize: 12 }}>
+              <strong>Cryptographic binding established:</strong> This university email is now permanently linked
+              to your anonymous identity. The same email cannot be used to create another identity (1 email = 1 identity).
+            </div>
+          </div>
+        </div>
+      )}
+
+      {result && !bindingResult && (
         <div className="result-box success" style={{ marginTop: 12 }}>
           <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>✓ Email Cryptographically Verified!</div>
           <div style={{ fontSize: 13, lineHeight: 1.6 }}>

@@ -1,3 +1,6 @@
+import { useState, useEffect } from 'react';
+import { network } from '../api';
+
 export default function NetworkPage() {
   return (
     <div>
@@ -6,12 +9,14 @@ export default function NetworkPage() {
         <p>How the peer-to-peer layer works behind the scenes</p>
       </div>
 
+      {/* Live P2P Status */}
+      <P2PStatus />
+
       <div className="card" style={{ padding: 20, background: 'var(--bg-alt)', marginBottom: 24 }}>
         <p style={{ fontSize: 14, lineHeight: 1.7, color: '#555' }}>
           The network layer runs automatically in the background. When you post a rumor or vote,
           it gets shared with other nodes using <strong>libp2p GossipSub</strong>.
           All nodes stay in sync using <strong>Anti-Entropy Merkle synchronization</strong>.
-          You don't need to do anything here — this page is for understanding how it works.
         </p>
       </div>
 
@@ -159,6 +164,83 @@ export default function NetworkPage() {
           </div>
         </details>
       </div>
+    </div>
+  );
+}
+
+/* ── Live P2P Status Component ────────────────────────────── */
+function P2PStatus() {
+  const [status, setStatus] = useState(null);
+  const [peers, setPeers] = useState(null);
+  const [error, setError] = useState('');
+
+  const refresh = async () => {
+    try {
+      const [s, p] = await Promise.all([network.getStatus(), network.getPeers()]);
+      setStatus(s);
+      setPeers(p);
+      setError('');
+    } catch (err) { setError(err.message); }
+  };
+
+  useEffect(() => {
+    refresh();
+    const interval = setInterval(refresh, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="card" style={{ marginBottom: 24 }}>
+      <div className="card-title" style={{ textTransform: 'none', letterSpacing: 0 }}>
+        Live P2P Node Status
+      </div>
+      {status ? (
+        <>
+          <div className="stats-row">
+            <div className="stat-card">
+              <div className="stat-value" style={{ color: status.started ? '#080' : '#c00' }}>
+                {status.started ? '● Online' : '○ Offline'}
+              </div>
+              <div className="stat-label">Node Status</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-value">{status.peers || 0}</div>
+              <div className="stat-label">Connected Peers</div>
+            </div>
+            {status.peerId && (
+              <div className="stat-card">
+                <div className="stat-value mono" style={{ fontSize: 11 }}>{status.peerId.substring(0, 20)}...</div>
+                <div className="stat-label">Peer ID</div>
+              </div>
+            )}
+          </div>
+          {status.multiaddrs?.length > 0 && (
+            <div style={{ marginTop: 12, fontSize: 12, color: '#666' }}>
+              <strong>Listening addresses:</strong>
+              <div style={{ fontFamily: 'monospace', marginTop: 4 }}>
+                {status.multiaddrs.map((ma, i) => <div key={i}>{ma}</div>)}
+              </div>
+            </div>
+          )}
+          {peers?.peers?.length > 0 && (
+            <div style={{ marginTop: 12, fontSize: 12 }}>
+              <strong>Connected peers:</strong>
+              <div style={{ fontFamily: 'monospace', marginTop: 4 }}>
+                {peers.peers.map((p, i) => <div key={i}>{p}</div>)}
+              </div>
+            </div>
+          )}
+          {status.error && (
+            <div className="result-box error" style={{ marginTop: 8, fontSize: 12 }}>
+              P2P: {status.error} — running in centralized mode
+            </div>
+          )}
+        </>
+      ) : (
+        <p style={{ color: '#888' }}>Loading P2P status...</p>
+      )}
+      {error && <div className="result-box error">{error}</div>}
+      <button className="btn btn-secondary" onClick={refresh} style={{ marginTop: 12 }}>↻ Refresh</button>
     </div>
   );
 }
