@@ -20,9 +20,17 @@ import { TombstoneManager } from './state/tombstone-manager.js';
 import {
   IDENTITY, SCORING, PROTOCOL, NETWORK, STORAGE, MAX_RUMOR_LENGTH,
 } from './config.js';
-import { generateProof, verifyProof } from '@semaphore-protocol/proof';
-import { AfwaahNode } from './network/node.js';
-import { GossipController } from './network/gossip-controller.js';
+// Heavy modules loaded dynamically to keep Vercel serverless bundle under 250MB.
+// Using computed paths so Vercel's Node File Tracer cannot trace them.
+let _generateProof, _verifyProof;
+async function lazyProof() {
+  if (!_generateProof) {
+    const mod = await import('@semaphore-protocol/' + 'proof');
+    _generateProof = mod.generateProof;
+    _verifyProof = mod.verifyProof;
+  }
+  return { generateProof: _generateProof, verifyProof: _verifyProof };
+}
 
 // ── Instantiate singletons ───────────────────────────────────
 const identityManager = new IdentityManager();
@@ -67,7 +75,10 @@ function hashToField(str) {
  * Non-blocking — if P2P fails, the server continues in centralized mode.
  */
 async function startP2P() {
+  if (process.env.VERCEL) return; // No P2P in serverless
   try {
+    const { AfwaahNode } = await import('./network/' + 'node.js');
+    const { GossipController } = await import('./network/' + 'gossip-controller.js');
     p2pNode = new AfwaahNode();
     await p2pNode.start();
 
@@ -395,6 +406,7 @@ app.post('/api/zk/generate-proof', async (req, res) => {
     const scopeField = typeof scope === 'string' && !/^\d+$/.test(scope)
       ? hashToField(scope) : scope.toString();
 
+    const { generateProof } = await lazyProof();
     const proof = await generateProof(identity, group, msgField, scopeField);
 
     // Serialize proof (BigInts → strings)
@@ -419,6 +431,7 @@ app.post('/api/zk/verify-proof', async (req, res) => {
       return res.status(400).json({ error: 'proof object is required' });
     }
 
+    const { verifyProof } = await lazyProof();
     const isValid = await verifyProof(proof);
 
     // Check nullifier uniqueness for the given scope
@@ -934,7 +947,8 @@ app.post('/api/state/ingest', async (req, res) => {
     if (op.payload?.zkProof) {
       const proof = op.payload.zkProof;
       try {
-        const isValid = await verifyProof(proof);
+        const { verifyProof: vp } = await lazyProof();
+        const isValid = await vp(proof);
         if (!isValid) {
           return res.status(400).json({ error: 'Invalid ZK proof — membership not verified' });
         }

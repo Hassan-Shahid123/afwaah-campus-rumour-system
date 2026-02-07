@@ -11,7 +11,8 @@
     "api/index.mjs": {
       "maxDuration": 60,
       "memory": 1024,
-      "includeFiles": "backend/**"
+      "includeFiles": "backend/src/**",
+      "excludeFiles": "{backend/node_modules/libp2p/**,backend/node_modules/@libp2p/**,backend/node_modules/@chainsafe/**,backend/node_modules/helia/**,backend/node_modules/@helia/**,backend/node_modules/@orbitdb/**,backend/node_modules/snarkjs/**,backend/node_modules/@semaphore-protocol/proof/**}"
     }
   },
   "headers": [
