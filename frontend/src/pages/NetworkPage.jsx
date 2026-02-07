@@ -120,50 +120,7 @@ export default function NetworkPage() {
         </div>
       </div>
 
-      {/* Components Reference */}
-      <div className="card collapsible-card">
-        <details>
-          <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
-            Technical API Reference
-          </summary>
-          <div style={{ marginTop: 16 }}>
-            <h4 style={{ marginBottom: 8 }}>AfwaahNode</h4>
-            <table className="data-table">
-              <thead><tr><th>Method</th><th>Description</th></tr></thead>
-              <tbody>
-                <tr><td className="mono">start()</td><td>Start the libp2p node</td></tr>
-                <tr><td className="mono">stop()</td><td>Stop the node</td></tr>
-                <tr><td className="mono">dial(multiaddr)</td><td>Connect to a peer</td></tr>
-                <tr><td className="mono">getConnectedPeers()</td><td>List connected peers</td></tr>
-                <tr><td className="mono">getMultiaddrs()</td><td>Get listening addresses</td></tr>
-              </tbody>
-            </table>
-
-            <h4 style={{ marginTop: 20, marginBottom: 8 }}>GossipController</h4>
-            <table className="data-table">
-              <thead><tr><th>Method</th><th>Description</th></tr></thead>
-              <tbody>
-                <tr><td className="mono">publishRumor(payload)</td><td>Broadcast a rumor to the network</td></tr>
-                <tr><td className="mono">publishVote(payload)</td><td>Broadcast a vote</td></tr>
-                <tr><td className="mono">publishJoin(payload)</td><td>Announce joining the network</td></tr>
-                <tr><td className="mono">publishTombstone(payload)</td><td>Broadcast a deletion</td></tr>
-                <tr><td className="mono">hasNullifier(n)</td><td>Check if nullifier was already used</td></tr>
-              </tbody>
-            </table>
-
-            <h4 style={{ marginTop: 20, marginBottom: 8 }}>AntiEntropySync</h4>
-            <table className="data-table">
-              <thead><tr><th>Method</th><th>Description</th></tr></thead>
-              <tbody>
-                <tr><td className="mono">startSync()</td><td>Begin periodic synchronization</td></tr>
-                <tr><td className="mono">getMerkleRoot()</td><td>Get current state hash</td></tr>
-                <tr><td className="mono">handleSyncRequest()</td><td>Respond to peer sync requests</td></tr>
-                <tr><td className="mono">getStats()</td><td>Sync statistics</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </details>
-      </div>
+      {/* removed Technical API Reference — developer docs, not user-facing */}
     </div>
   );
 }
