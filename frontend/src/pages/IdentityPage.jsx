@@ -180,13 +180,18 @@ function EmailVerifyCard() {
           <li>Open <strong>any email</strong> in your inbox (sent to you or by you)</li>
           <li>In Gmail: click ⋮ → "Download message" → saves as .eml</li>
           <li>In Outlook: File → Save As → choose .eml format</li>
-          <li>Open the .eml file in any text editor (Notepad) and copy all the text</li>
-          <li>Paste it below and click Verify</li>
+          <li>Open the .eml file in Notepad → <strong>Select All (Ctrl+A)</strong> → <strong>Copy (Ctrl+C)</strong></li>
+          <li>Paste the <strong>entire content</strong> below and click Verify</li>
         </ol>
         <div style={{ marginTop: 8, padding: '8px 10px', background: '#fff3cd', borderRadius: 4, fontSize: 12 }}>
-          <strong>Important:</strong> The .eml must be downloaded from your <strong>university inbox</strong>.
-          The system checks the "Delivered-To" header to confirm which inbox it came from.
-          An .eml from a Gmail/Yahoo inbox will be rejected even if the sender is a university address.
+          <strong>⚠ Critical:</strong> You must paste the <strong>complete</strong> .eml file — do not remove or edit any part,
+          including large blocks of random characters (those are attachments). The system uses <strong>DKIM cryptographic verification</strong>:
+          it fetches the sender's RSA public key from DNS and verifies the digital signature. If even one character
+          is changed, the verification will fail. This same technique is what Gmail shows as "signed by seecs.edu.pk".
+        </div>
+        <div style={{ marginTop: 6, padding: '8px 10px', background: '#e3f2fd', borderRadius: 4, fontSize: 12 }}>
+          <strong>Why from your university inbox?</strong> The "Delivered-To" header proves which inbox the .eml was downloaded from.
+          If someone downloads your email from their Gmail inbox and tries to use it, the system will detect it's from a Gmail inbox and reject it.
         </div>
       </div>
 
@@ -202,13 +207,18 @@ function EmailVerifyCard() {
 
       {result && (
         <div className="result-box success" style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>✓ Email Verified!</div>
+          <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>✓ Email Cryptographically Verified!</div>
           <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-            <div><strong>Inbox Verified:</strong> {result.deliveredTo || result.domain}</div>
+            <div><strong>Inbox Owner:</strong> {result.deliveredTo || result.domain}</div>
             <div><strong>From:</strong> {result.from}</div>
-            <div><strong>DKIM Domain:</strong> {result.signingDomain || result.selector}</div>
+            <div><strong>DKIM Signature:</strong> <span style={{ color: '#080', fontWeight: 600 }}>{result.dkimStatus === 'pass' ? '✓ PASS' : result.dkimStatus || 'N/A'}</span> (d={result.signingDomain})</div>
             <div><strong>Message ID:</strong> {result.messageId}</div>
-            <div style={{ marginTop: 8, color: '#080' }}>Your university inbox ownership is verified via Delivered-To + DKIM. You have full posting and voting privileges.</div>
+            <div style={{ marginTop: 10, padding: '8px 10px', background: '#e8f5e9', borderRadius: 4, fontSize: 12 }}>
+              <strong>3-Layer Verification Passed:</strong><br />
+              1. ✓ <strong>DKIM Crypto:</strong> RSA signature verified against DNS public key — headers not tampered<br />
+              2. ✓ <strong>DKIM Domain:</strong> Signing domain ({result.signingDomain}) is an authorized university<br />
+              3. ✓ <strong>Inbox Ownership:</strong> .eml downloaded from a university inbox ({result.deliveredTo})
+            </div>
           </div>
         </div>
       )}

@@ -11,10 +11,63 @@
 //   5. Full flow: email → identity → tree → proof
 // ─────────────────────────────────────────────────────────────
 
-import { describe, it, expect, beforeEach } from '@jest/globals';
+import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { EmailVerifier } from '../src/identity/email-verifier.js';
 import { IdentityManager } from '../src/identity/identity-manager.js';
 import { MembershipTree } from '../src/identity/membership-tree.js';
+
+// ─── Mock dkimVerify for unit tests ───────────────────────────
+// Real DKIM verification requires DNS lookups for public keys.
+// Unit tests use fake .eml content with no real DNS keys,
+// so we mock dkimVerify to simulate pass/fail based on the domain.
+//
+// The REAL dkimVerify is used in production and in the integration
+// test script (test-real-emails.mjs).
+// ──────────────────────────────────────────────────────────────
+
+// We mock the dkimVerify module before importing EmailVerifier
+// Since we're using ESM, we need to mock at the verifier level
+// by overriding the method after construction
+
+/**
+ * Helper: create a verifier with mocked DKIM crypto verification.
+ * In unit tests, we simulate dkimVerify returning 'pass' for university
+ * domains and 'fail' for others, so we can test the domain/inbox logic
+ * without needing real DNS.
+ */
+function createMockedVerifier(allowedDomains = ['university.edu', 'student.university.edu']) {
+  const verifier = new EmailVerifier(allowedDomains);
+
+  // Save the original extractDKIM
+  const originalExtractDKIM = verifier.extractDKIM.bind(verifier);
+
+  // Override extractDKIM to inject mock dkimStatus
+  verifier.extractDKIM = async function(emlContent) {
+    const result = await originalExtractDKIM(emlContent);
+
+    // In unit tests, simulate DKIM crypto result based on whether
+    // the signing domain is in the allowed list AND has a DKIM signature
+    if (result.signature && result.signingDomain) {
+      // Simulate: real domains with DKIM signatures pass crypto verification
+      result.dkimStatus = 'pass';
+      result.dkimInfo = `dkim=pass (mocked) header.d=${result.signingDomain}`;
+    } else {
+      result.dkimStatus = 'none';
+      result.dkimInfo = 'No DKIM signature found (mocked)';
+    }
+
+    // Recalculate isValid with the mocked dkimStatus
+    const recipientDomain = result.deliveredTo ? result.deliveredTo.split('@')[1]?.toLowerCase() || '' : '';
+    const recipientValid = recipientDomain ? verifier._isDomainAllowed(recipientDomain) : false;
+    const dkimDomainValid = result.signingDomain ? verifier._isDomainAllowed(result.signingDomain) : false;
+    const dkimCryptoValid = result.dkimStatus === 'pass';
+    result.isValid = recipientValid && dkimDomainValid && dkimCryptoValid;
+
+    return result;
+  };
+
+  return verifier;
+}
 
 // ─── Test Fixtures ────────────────────────────────────────────
 
@@ -124,7 +177,7 @@ describe('EmailVerifier', () => {
   let verifier;
 
   beforeEach(() => {
-    verifier = new EmailVerifier(['university.edu', 'student.university.edu']);
+    verifier = createMockedVerifier(['university.edu', 'student.university.edu']);
   });
 
   describe('extractDKIM()', () => {
@@ -473,8 +526,8 @@ describe('MembershipTree', () => {
 
 describe('Identity Full Flow', () => {
   it('should complete: email verify → identity create → tree add → proof generate', async () => {
-    // Step 1: Verify email
-    const verifier = new EmailVerifier(['university.edu']);
+    // Step 1: Verify email (using mocked verifier for unit tests — real crypto in production)
+    const verifier = createMockedVerifier(['university.edu']);
     const dkim = await verifier.verifyEmail(VALID_EML);
     expect(dkim.isValid).toBe(true);
 

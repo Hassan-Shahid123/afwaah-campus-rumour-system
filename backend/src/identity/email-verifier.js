@@ -1,39 +1,44 @@
 // ─────────────────────────────────────────────────────────────
-// Afwaah — Email Verifier
-// Parses .eml files, extracts DKIM signatures, and validates
-// that the .eml was downloaded from an authorized university inbox.
+// Afwaah — Email Verifier (Cryptographic DKIM Verification)
 //
-// KEY SECURITY PRINCIPLE:
-//   The Delivered-To header tells us WHOSE INBOX the .eml was
-//   downloaded from. This is the person presenting the proof.
-//   - If Delivered-To is a university domain → they own that inbox → PASS
-//   - If Delivered-To is gmail.com → they're a gmail user trying
-//     to use someone else's university email as proof → FAIL
+// This module CRYPTOGRAPHICALLY verifies .eml files using the
+// mailauth library, which performs REAL DKIM signature verification:
 //
-// Additional checks:
-//   - DKIM signing domain (d=) must be an allowed university domain
-//   - From address is extracted for display purposes
+//   1. Parses the DKIM-Signature header from the .eml
+//   2. Fetches the sender domain's RSA public key from DNS
+//      (e.g., google._domainkey.seecs.edu.pk TXT record)
+//   3. Verifies the RSA signature over the signed headers
+//      (From, To, Subject, Date, Message-ID, etc.)
+//   4. Verifies the body hash (bh=) matches the actual body
 //
-// NOTE: Full ZK-Email proof generation (zk-email-sdk) requires
-// heavy circuit compilation. For the MVP, this module validates
-// inbox ownership via Delivered-To + DKIM domain verification.
+// If ANYONE edits even one character of the From/To/Subject/body,
+// the cryptographic signature FAILS — this cannot be faked.
+//
+// Security layers:
+//   LAYER 1: DKIM crypto verification (proves headers not tampered)
+//   LAYER 2: DKIM signing domain must be an allowed university domain
+//   LAYER 3: Delivered-To must be an allowed university inbox
+//            (proves WHO downloaded this .eml)
 // ─────────────────────────────────────────────────────────────
 
 import { simpleParser } from 'mailparser';
+import { dkimVerify } from 'mailauth/lib/dkim/verify.js';
 import { IDENTITY } from '../config.js';
 
 /**
- * Result of DKIM extraction from an email.
+ * Result of DKIM verification from an email.
  * @typedef {Object} DKIMResult
  * @property {string} domain - The recipient's (Delivered-To) email domain
  * @property {string} deliveredTo - The Delivered-To email address (inbox owner)
  * @property {string} from - The sender's email address
- * @property {string} selector - The DKIM selector (if found)
+ * @property {string} selector - The DKIM selector used
  * @property {string} signature - Raw DKIM-Signature header value
- * @property {boolean} isValid - Whether the Delivered-To domain + DKIM domain are allowed
+ * @property {boolean} isValid - Whether ALL checks passed (crypto + domain + inbox)
  * @property {string} bodyHash - The body hash from the DKIM signature
  * @property {string} messageId - Unique message identifier
  * @property {string} signingDomain - The DKIM d= signing domain
+ * @property {string} dkimStatus - The cryptographic verification result (pass/fail/none)
+ * @property {string} dkimInfo - Human-readable DKIM verification details
  */
 
 export class EmailVerifier {
@@ -45,22 +50,20 @@ export class EmailVerifier {
   }
 
   /**
-   * Parse a raw .eml file and extract DKIM signature data.
-   * Validates that the Delivered-To address (inbox owner) belongs
-   * to an authorized domain, and that the DKIM signing domain is valid.
+   * Parse a raw .eml file, CRYPTOGRAPHICALLY verify its DKIM signature,
+   * and validate domain + inbox ownership.
    *
    * @param {string|Buffer} emlContent - Raw email content (.eml file)
-   * @returns {Promise<DKIMResult>} Extracted DKIM data
+   * @returns {Promise<DKIMResult>} Verified DKIM data
    * @throws {Error} If parsing fails or required headers are missing
    */
   async extractDKIM(emlContent) {
     const raw = typeof emlContent === 'string' ? emlContent : emlContent.toString('utf-8');
 
-    // Parse the email
+    // Parse the email for metadata
     const parsed = await simpleParser(raw);
 
     // ─── Extract Delivered-To (the inbox this .eml was downloaded from) ───
-    // This is the CRITICAL check: who downloaded this .eml?
     const deliveredTo = this._extractDeliveredTo(raw);
 
     // Extract the sender (From) for display
@@ -69,15 +72,45 @@ export class EmailVerifier {
       throw new Error('E003: No sender address found in the email');
     }
 
-    // Extract DKIM-Signature header from raw headers
-    const dkimSignature = this._extractDKIMHeader(raw);
+    // ─── CRYPTOGRAPHIC DKIM VERIFICATION ─────────────────────────
+    // This is the REAL check: fetches the public key from DNS and
+    // verifies the RSA signature over the email headers + body hash.
+    // If the email was edited, this WILL FAIL.
+    let dkimStatus = 'none';
+    let dkimInfo = 'No DKIM signature found';
+    let dkimSigningDomain = '';
+    let dkimSelector = '';
 
-    // Parse DKIM fields
+    // Also extract raw DKIM header for display
+    const dkimSignature = this._extractDKIMHeader(raw);
     const dkimFields = this._parseDKIMFields(dkimSignature);
 
+    try {
+      const dkimResult = await dkimVerify(raw);
+
+      if (dkimResult && dkimResult.results && dkimResult.results.length > 0) {
+        // Find the first result from an allowed domain, or use the first result
+        const relevantResult = dkimResult.results.find(r => {
+          const domain = r.signingDomain || r.status?.comment || '';
+          return this._isDomainAllowed(domain);
+        }) || dkimResult.results[0];
+
+        dkimStatus = relevantResult.status?.result || 'none';
+        dkimInfo = relevantResult.info || `dkim=${dkimStatus}`;
+        dkimSigningDomain = relevantResult.signingDomain || dkimFields.signingDomain || '';
+        dkimSelector = relevantResult.selector || dkimFields.selector || '';
+      }
+    } catch (dkimErr) {
+      // DKIM verification failed (e.g., DNS unreachable)
+      dkimStatus = 'temperror';
+      dkimInfo = `DKIM verification error: ${dkimErr.message}`;
+      // Fall back to parsed fields
+      dkimSigningDomain = dkimFields.signingDomain || '';
+      dkimSelector = dkimFields.selector || '';
+    }
+
     // ─── Domain validation ───────────────────────────────────────
-    // PRIMARY CHECK: Delivered-To domain must be an allowed university domain
-    // This proves the person who downloaded this .eml owns a university inbox
+    // CHECK 1: Delivered-To domain must be an allowed university domain
     let recipientDomain = '';
     let recipientValid = false;
     if (deliveredTo) {
@@ -85,26 +118,31 @@ export class EmailVerifier {
       recipientValid = this._isDomainAllowed(recipientDomain);
     }
 
-    // SECONDARY CHECK: DKIM signing domain should also be from an allowed domain
-    // This proves the email was authentically sent from the university email system
-    const signingDomain = (dkimFields.signingDomain || '').toLowerCase();
+    // CHECK 2: DKIM signing domain must be from an allowed domain
+    const signingDomain = (dkimSigningDomain || '').toLowerCase();
     const dkimDomainValid = signingDomain ? this._isDomainAllowed(signingDomain) : false;
 
-    // Both checks must pass for the email to be considered valid:
-    // 1. The .eml must come from an authorized inbox (Delivered-To)
-    // 2. The DKIM signature must be from an authorized domain
-    const isValid = recipientValid && dkimDomainValid;
+    // CHECK 3: DKIM signature must CRYPTOGRAPHICALLY pass
+    const dkimCryptoValid = dkimStatus === 'pass';
+
+    // ALL THREE checks must pass:
+    // 1. Delivered-To is a university inbox (proves who downloaded it)
+    // 2. DKIM signing domain is a university domain
+    // 3. DKIM signature cryptographically verifies (proves headers were NOT edited)
+    const isValid = recipientValid && dkimDomainValid && dkimCryptoValid;
 
     return {
       domain: recipientDomain || fromAddress.split('@')[1]?.toLowerCase() || '',
       deliveredTo: deliveredTo || '',
       from: fromAddress,
-      selector: dkimFields.selector || 'unknown',
+      selector: dkimSelector || dkimFields.selector || 'unknown',
       signature: dkimSignature,
       isValid,
       bodyHash: dkimFields.bodyHash || '',
       messageId: parsed.messageId || '',
       signingDomain,
+      dkimStatus,
+      dkimInfo,
     };
   }
 
@@ -133,6 +171,22 @@ export class EmailVerifier {
       errors.push('E003: No DKIM signature found in the email');
     }
 
+    // CHECK CRYPTOGRAPHIC DKIM VERIFICATION
+    if (dkimResult.dkimStatus !== 'pass') {
+      if (dkimResult.dkimStatus === 'fail') {
+        errors.push(`E008: DKIM signature FAILED cryptographic verification — the email headers have been tampered with. The RSA signature does not match the signed headers (From, To, Subject, etc.). (${dkimResult.dkimInfo})`);
+      } else if (dkimResult.dkimStatus === 'neutral') {
+        // 'neutral' usually means body hash mismatch — the email body was modified/truncated
+        errors.push(`E008: DKIM verification failed — the email body hash does not match. This usually means the .eml content was not pasted completely. Make sure you paste the ENTIRE .eml file including all attachment data (the large blocks of random characters). Do not remove or edit any part of the file. (${dkimResult.dkimInfo})`);
+      } else if (dkimResult.dkimStatus === 'temperror') {
+        errors.push(`E008: DKIM verification could not complete — DNS lookup failed. Check your internet connection and try again. (${dkimResult.dkimInfo})`);
+      } else if (dkimResult.dkimStatus === 'none') {
+        errors.push('E008: No DKIM signature could be verified. The email may not have a valid DKIM signature.');
+      } else {
+        errors.push(`E008: DKIM cryptographic verification returned "${dkimResult.dkimStatus}": ${dkimResult.dkimInfo}`);
+      }
+    }
+
     // Check DKIM signing domain
     if (dkimResult.signingDomain && !this._isDomainAllowed(dkimResult.signingDomain)) {
       errors.push(`E007: DKIM signing domain "${dkimResult.signingDomain}" is not an authorized university domain`);
@@ -149,7 +203,7 @@ export class EmailVerifier {
   }
 
   /**
-   * Full pipeline: parse + validate. Throws on failure.
+   * Full pipeline: parse + crypto verify + validate. Throws on failure.
    *
    * @param {string|Buffer} emlContent - Raw .eml file content
    * @returns {Promise<DKIMResult>} Validated DKIM result
@@ -184,7 +238,6 @@ export class EmailVerifier {
    * @private
    */
   _extractDeliveredTo(rawEmail) {
-    // Match the first Delivered-To header (topmost = final recipient)
     const match = rawEmail.match(/^Delivered-To:\s*(.+?)[\r\n]/im);
     if (match) {
       return match[1].trim().toLowerCase();
@@ -197,13 +250,10 @@ export class EmailVerifier {
    * @private
    */
   _extractDKIMHeader(rawEmail) {
-    // Match the DKIM-Signature header, which may span multiple lines
-    // (continuation lines start with whitespace)
     const dkimRegex = /DKIM-Signature:\s*([\s\S]*?)(?=\r?\n[^\s]|\r?\n\r?\n)/i;
     const match = rawEmail.match(dkimRegex);
 
     if (match) {
-      // Clean up: remove line breaks and extra whitespace
       return match[1].replace(/\r?\n\s+/g, ' ').trim();
     }
 
