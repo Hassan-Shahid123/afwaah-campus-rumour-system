@@ -1232,13 +1232,16 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: err.message || 'Internal server error' });
 });
 
-app.listen(PORT, () => {
-  console.log(`\n  ┌─────────────────────────────────────────┐`);
-  console.log(`  │  Afwaah API Server running on port ${PORT}  │`);
-  console.log(`  └─────────────────────────────────────────┘\n`);
+// On Vercel, the serverless function handles requests — don't call listen()
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`\n  ┌─────────────────────────────────────────┐`);
+    console.log(`  │  Afwaah API Server running on port ${PORT}  │`);
+    console.log(`  └─────────────────────────────────────────┘\n`);
 
-  // Start P2P node in background (non-blocking — server works without it)
-  startP2P();
-});
+    // Start P2P node in background (non-blocking — server works without it)
+    startP2P();
+  });
+}
 
 export default app;

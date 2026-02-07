@@ -29,6 +29,10 @@ npm-debug.log*
 # Environment
 .env
 .env.local
+.env.production.local
+
+# Vercel
+.vercel
 
 # Demo files
 backend/demo-*.js

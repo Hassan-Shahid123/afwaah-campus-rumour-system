@@ -3,7 +3,9 @@
 // Consistent function names with backend classes.
 // ─────────────────────────────────────────────────────────────
 
-const BASE = 'http://localhost:3001/api';
+// In production (Vercel), API is on the same domain at /api
+// In development, point to the local Express server
+const BASE = import.meta.env.VITE_API_URL || '/api';
 
 async function request(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, {
