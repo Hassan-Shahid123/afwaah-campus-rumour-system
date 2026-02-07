@@ -180,8 +180,7 @@ function EmailVerifyCard() {
           <li>Open <strong>any email</strong> in your inbox (sent to you or by you)</li>
           <li>In Gmail: click ⋮ → "Download message" → saves as .eml</li>
           <li>In Outlook: File → Save As → choose .eml format</li>
-          <li>Open the .eml file in Notepad → <strong>Select All (Ctrl+A)</strong> → <strong>Copy (Ctrl+C)</strong></li>
-          <li>Paste the <strong>entire content</strong> below and click Verify</li>
+          <li><strong>Upload</strong> the .eml file using the button below, or open it in Notepad → Select All → Copy → Paste</li>
         </ol>
         <div style={{ marginTop: 8, padding: '8px 10px', background: '#fff3cd', borderRadius: 4, fontSize: 12 }}>
           <strong>⚠ Critical:</strong> You must paste the <strong>complete</strong> .eml file — do not remove or edit any part,
@@ -196,7 +195,38 @@ function EmailVerifyCard() {
       </div>
 
       <div className="form-group">
-        <label>Paste .eml File Content</label>
+        <label>Upload .eml File</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <label
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '8px 16px', background: 'var(--accent)', color: '#fff',
+              borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600
+            }}
+          >
+            📎 Choose .eml File
+            <input
+              type="file"
+              accept=".eml"
+              style={{ display: 'none' }}
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = ev => setEmlContent(ev.target.result);
+                reader.onerror = () => setError('Failed to read file');
+                reader.readAsText(file);
+                // reset so the same file can be re-selected
+                e.target.value = '';
+              }}
+            />
+          </label>
+          <span style={{ fontSize: 12, color: '#888' }}>
+            {emlContent ? '✓ File loaded — ready to verify' : 'or paste content below'}
+          </span>
+        </div>
+
+        <label>Or Paste .eml Content Manually</label>
         <textarea rows={6} value={emlContent} onChange={e => setEmlContent(e.target.value)}
           placeholder={'Paste the entire raw .eml content here...\n\nIt starts with headers like:\nFrom: yourname@seecs.edu.pk\nDKIM-Signature: v=1; a=rsa-sha256; d=seecs.edu.pk; ...'}
           style={{ fontFamily: 'monospace', fontSize: 12 }} />

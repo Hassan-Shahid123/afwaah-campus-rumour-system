@@ -63,11 +63,34 @@ app.post('/api/identity/create', (req, res) => {
 app.post('/api/identity/import', (req, res) => {
   try {
     const { exportedKey } = req.body;
-    const identity = identityManager.importIdentity(exportedKey);
+    if (!exportedKey || typeof exportedKey !== 'string' || exportedKey.trim().length === 0) {
+      return res.status(400).json({ error: 'Recovery key is required' });
+    }
+
+    // Try to import — will throw if the key is structurally invalid
+    let identity;
+    try {
+      identity = identityManager.importIdentity(exportedKey.trim());
+    } catch (importErr) {
+      return res.status(400).json({ error: 'Invalid recovery key — the key format is not recognized. Please check and try again.' });
+    }
+
     const commitment = identityManager.getCommitment(identity);
+
+    // Check if this commitment exists in the membership tree
+    const memberIndex = membershipTree.indexOf(commitment);
+    if (memberIndex === -1) {
+      return res.status(404).json({
+        error: 'No account found for this recovery key. This key does not match any registered member. Make sure you are using the correct key from an account that was previously created.',
+        found: false,
+      });
+    }
+
     res.json({
       commitment: commitment.toString(),
       publicKey: identity.publicKey?.toString() ?? '',
+      memberIndex,
+      found: true,
     });
   } catch (err) {
     res.status(400).json({ error: err.message });

@@ -60,17 +60,28 @@ export function UserProvider({ children }) {
   };
 
   const restoreAccount = async (exportedKey) => {
+    if (!exportedKey || typeof exportedKey !== 'string' || exportedKey.trim().length === 0) {
+      throw new Error('Please enter your recovery key.');
+    }
     setLoading(true);
     try {
-      const identity = await identityManager.importIdentity(exportedKey);
+      // This call validates the key AND checks membership on the backend
+      const identity = await identityManager.importIdentity(exportedKey.trim());
+
+      // Backend returns { found: true } only if the commitment is in the membership tree
+      if (!identity.found) {
+        throw new Error('No account found for this recovery key.');
+      }
+
       const nullifier = `user_${identity.commitment.substring(0, 12)}`;
 
       const userData = {
         commitment: identity.commitment,
-        exportedKey,
+        exportedKey: exportedKey.trim(),
         publicKey: identity.publicKey,
         nullifier,
-        createdAt: Date.now(),
+        createdAt: Date.now(), // We don't have original timestamp, use current
+        restored: true,
       };
       setUser(userData);
       setLoading(false);

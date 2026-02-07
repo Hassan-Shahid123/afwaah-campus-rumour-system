@@ -23,7 +23,63 @@
 
 import { simpleParser } from 'mailparser';
 import { dkimVerify } from 'mailauth/lib/dkim/verify.js';
+import dns from 'dns';
 import { IDENTITY } from '../config.js';
+
+// ─── Custom DNS Resolver ─────────────────────────────────────
+// University and mobile networks often block or filter DNS TXT
+// record lookups needed for DKIM verification. This resolver
+// tries system DNS first, then falls back to public resolvers
+// (Google 8.8.8.8, Cloudflare 1.1.1.1).
+// ──────────────────────────────────────────────────────────────
+
+const PUBLIC_DNS_SERVERS = ['8.8.8.8', '1.1.1.1', '8.8.4.4', '1.0.0.1'];
+
+function createFallbackResolver() {
+  return async function fallbackResolver(name, rrtype) {
+    // Attempt 1: system DNS
+    try {
+      const result = await new Promise((resolve, reject) => {
+        dns.resolve(name, rrtype, (err, records) => {
+          if (err) reject(err);
+          else resolve(records);
+        });
+      });
+      return result;
+    } catch (systemErr) {
+      // System DNS failed — try public resolvers
+    }
+
+    // Attempt 2: public DNS resolvers
+    const resolver = new dns.Resolver();
+    resolver.setServers(PUBLIC_DNS_SERVERS);
+
+    try {
+      const result = await new Promise((resolve, reject) => {
+        if (rrtype === 'TXT') {
+          resolver.resolveTxt(name, (err, records) => {
+            if (err) reject(err);
+            // mailauth expects the same shape as dns.resolve(name, 'TXT')
+            else resolve(records);
+          });
+        } else if (rrtype === 'MX') {
+          resolver.resolveMx(name, (err, records) => {
+            if (err) reject(err);
+            else resolve(records);
+          });
+        } else {
+          resolver.resolve(name, rrtype, (err, records) => {
+            if (err) reject(err);
+            else resolve(records);
+          });
+        }
+      });
+      return result;
+    } catch (publicErr) {
+      throw publicErr; // both failed
+    }
+  };
+}
 
 /**
  * Result of DKIM verification from an email.
@@ -86,7 +142,7 @@ export class EmailVerifier {
     const dkimFields = this._parseDKIMFields(dkimSignature);
 
     try {
-      const dkimResult = await dkimVerify(raw);
+      const dkimResult = await dkimVerify(raw, { resolver: createFallbackResolver() });
 
       if (dkimResult && dkimResult.results && dkimResult.results.length > 0) {
         // Find the first result from an allowed domain, or use the first result
