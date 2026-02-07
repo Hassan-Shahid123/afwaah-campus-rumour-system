@@ -175,8 +175,6 @@ export const tombstoneManager = {
     request('/tombstone/register-rumor', { method: 'POST', body: JSON.stringify({ rumorId, authorNullifier, metadata }) }),
   createTombstone: (rumorId, authorNullifier, reason) =>
     request('/tombstone/create', { method: 'POST', body: JSON.stringify({ rumorId, authorNullifier, reason }) }),
-  createAdminTombstone: (rumorId, reason, adminId) =>
-    request('/tombstone/admin-create', { method: 'POST', body: JSON.stringify({ rumorId, reason, adminId }) }),
   isTombstoned: (rumorId) =>
     request(`/tombstone/check/${encodeURIComponent(rumorId)}`),
   getAll: () =>

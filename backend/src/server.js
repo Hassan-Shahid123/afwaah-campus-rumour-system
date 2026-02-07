@@ -1143,17 +1143,6 @@ app.post('/api/tombstone/create', (req, res) => {
   }
 });
 
-// POST /api/tombstone/admin-create
-app.post('/api/tombstone/admin-create', (req, res) => {
-  try {
-    const { rumorId, reason, adminId } = req.body;
-    const tombstone = tombstoneManager.createAdminTombstone(rumorId, reason, adminId);
-    res.json(tombstone);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
 // GET /api/tombstone/check/:rumorId
 app.get('/api/tombstone/check/:rumorId', (req, res) => {
   try {

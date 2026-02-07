@@ -464,10 +464,24 @@ export class EmailVerifier {
     }
 
     const deliveredToLower = deliveredTo.toLowerCase();
-    const matchesAny = signedRecipients.some(addr => addr === deliveredToLower);
+    const deliveredToDomain = deliveredToLower.split('@')[1] || '';
 
-    if (matchesAny) {
-      return { consistent: true, details: 'Delivered-To matches DKIM-signed To/Cc header' };
+    // First try exact address match
+    const exactMatch = signedRecipients.some(addr => addr === deliveredToLower);
+    if (exactMatch) {
+      return { consistent: true, details: 'Delivered-To matches DKIM-signed To/Cc header (exact)' };
+    }
+
+    // For mailing list emails: the To: is the list address (e.g. bese14@seecs.edu.pk)
+    // while Delivered-To is the individual (e.g. student@seecs.edu.pk).
+    // They share the same domain, which is sufficient — both are university domain.
+    const domainMatch = signedRecipients.some(addr => {
+      const addrDomain = (addr.split('@')[1] || '').toLowerCase();
+      return addrDomain === deliveredToDomain;
+    });
+
+    if (domainMatch) {
+      return { consistent: true, details: 'Delivered-To domain matches DKIM-signed To/Cc domain (mailing list)' };
     }
 
     return {

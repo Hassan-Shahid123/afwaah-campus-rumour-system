@@ -366,22 +366,6 @@ describe('TombstoneManager', () => {
     })).toThrow('E202');
   });
 
-  // ── Admin Tombstone ────────────────────────────────────────
-
-  test('creates admin tombstone without author check', () => {
-    // No registerRumor needed for admin
-    tm.registerRumor('r1', 'author1');
-    const ts = tm.createAdminTombstone('r1', 'policy_violation');
-
-    expect(ts.payload.admin).toBe(true);
-    expect(ts.payload.reason).toBe('policy_violation');
-    expect(tm.isTombstoned('r1')).toBe(true);
-  });
-
-  test('admin tombstone rejects missing rumorId', () => {
-    expect(() => tm.createAdminTombstone(null, 'reason')).toThrow('E206');
-  });
-
   // ── Vote Validation ────────────────────────────────────────
 
   test('validates vote on active rumor', () => {
@@ -1306,7 +1290,7 @@ describe('Integration: Full Pipeline', () => {
 
     // Tombstone rumor_x → scores should freeze (no reversal without re-computation)
     tombstoneManager.registerRumor('rumor_x', 'poster');
-    tombstoneManager.createAdminTombstone('rumor_x', 'policy_violation');
+    tombstoneManager.createTombstone({ rumorId: 'rumor_x', authorNullifier: 'poster', reason: 'retracted' });
 
     snapshotter.ingest(makeRumorOp('rumor_x', 'test', 'poster'));
     for (const v of votes) {

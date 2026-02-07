@@ -121,46 +121,6 @@ export class TombstoneManager extends EventEmitter {
     return tombstone;
   }
 
-  /**
-   * Create an admin/system tombstone (no author check).
-   * Used for policy violations, spam removal, etc.
-   *
-   * @param {string} rumorId
-   * @param {string} reason
-   * @param {string} [adminId]
-   * @returns {object} tombstone operation
-   */
-  createAdminTombstone(rumorId, reason, adminId = 'system') {
-    if (!rumorId) {
-      throw new Error('E206: Missing rumorId for admin tombstone');
-    }
-
-    if (this._tombstones.has(rumorId)) {
-      throw new Error('E203: Rumor is already tombstoned');
-    }
-
-    const tombstone = {
-      type: PROTOCOL.TYPES.TOMBSTONE,
-      version: PROTOCOL.VERSION,
-      payload: {
-        rumorId,
-        authorNullifier: adminId,
-        reason: reason || 'admin_removal',
-        admin: true,
-        timestamp: Date.now(),
-      },
-      timestamp: Date.now(),
-    };
-
-    this._tombstones.set(rumorId, {
-      ...tombstone.payload,
-      tombstonedAt: Date.now(),
-    });
-
-    this.emit('tombstone', tombstone);
-    return tombstone;
-  }
-
   // ── Queries ────────────────────────────────────────────────
 
   /**

@@ -1,17 +1,17 @@
 import { useState } from 'react';
-import { snapshotter, tombstoneManager, config } from '../api';
+import { snapshotter, config } from '../api';
 
 export default function StatePage() {
   return (
     <div>
       <div className="page-header">
-        <h2>Admin Panel</h2>
-        <p>System state, operation log, data management, and configuration</p>
+        <h2>Node Dashboard</h2>
+        <p>Local node state, operation log, data management, and configuration</p>
       </div>
 
       <SystemOverview />
       <OpLogViewer />
-      <AdminActions />
+      <NodeActions />
       <ConfigViewer />
     </div>
   );
@@ -129,8 +129,8 @@ function opSummary(op) {
   }
 }
 
-/* ── Admin Actions (collapsible) ──────────────────────────── */
-function AdminActions() {
+/* ── Node Actions (collapsible) ────────────────────────────── */
+function NodeActions() {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -149,8 +149,6 @@ function AdminActions() {
           <BatchIngestTool />
           <div className="divider" />
           <ExportImportStateTool />
-          <div className="divider" />
-          <AdminTombstoneTool />
         </div>
       )}
     </div>
@@ -258,48 +256,6 @@ function ExportImportStateTool() {
           <button className="btn btn-primary" onClick={handleImport} disabled={!importData}>Import</button>
         </div>
       </div>
-      {result && <div className="result-box success">{JSON.stringify(result, null, 2)}</div>}
-      {error && <div className="result-box error">{error}</div>}
-    </div>
-  );
-}
-
-/* ── Admin Tombstone ──────────────────────────────────────── */
-function AdminTombstoneTool() {
-  const [rumorId, setRumorId] = useState('');
-  const [reason, setReason] = useState('');
-  const [adminId] = useState('admin');
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState('');
-
-  const handleCreate = async () => {
-    setError('');
-    try {
-      const data = await tombstoneManager.createAdminTombstone(rumorId, reason || 'admin_action', adminId);
-      await snapshotter.ingest({
-        type: 'TOMBSTONE',
-        payload: { rumorId, authorNullifier: adminId, reason: reason || 'admin_action' },
-        timestamp: Date.now(),
-      });
-      setResult(data);
-    } catch (err) { setError(err.message); }
-  };
-
-  return (
-    <div>
-      <h4 style={{ marginBottom: 8 }}>Admin: Delete Any Rumor</h4>
-      <p className="hint" style={{ marginBottom: 12 }}>Remove a rumor regardless of who posted it (admin power).</p>
-      <div className="grid-2">
-        <div className="form-group">
-          <label>Rumor ID</label>
-          <input type="text" value={rumorId} onChange={e => setRumorId(e.target.value)} placeholder="Rumor to delete" />
-        </div>
-        <div className="form-group">
-          <label>Reason</label>
-          <input type="text" value={reason} onChange={e => setReason(e.target.value)} placeholder="spam / policy violation" />
-        </div>
-      </div>
-      <button className="btn btn-danger" onClick={handleCreate} disabled={!rumorId}>Admin Delete</button>
       {result && <div className="result-box success">{JSON.stringify(result, null, 2)}</div>}
       {error && <div className="result-box error">{error}</div>}
     </div>

@@ -52,7 +52,7 @@ function AppLayout() {
             <span className="icon">&#9678;</span> How It Works
           </NavLink>
           <NavLink to="/state" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            <span className="icon">&#9881;</span> Admin
+            <span className="icon">&#9881;</span> Node
           </NavLink>
         </nav>
         {user && (

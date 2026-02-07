@@ -84,7 +84,7 @@ DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
         bh=base64bodyhash==;
         b=base64signaturedata==;
 From: student123@university.edu
-To: someone@example.com
+To: all-students@university.edu
 Subject: Library Overdue Notice
 Date: Thu, 06 Feb 2026 10:00:00 +0000
 Message-ID: <test-msg-001@university.edu>
@@ -124,7 +124,7 @@ DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
         bh=base64bodyhash==;
         b=base64signaturedata==;
 From: random@gmail.com
-To: someone@example.com
+To: someone@gmail.com
 Subject: Hello
 Date: Thu, 06 Feb 2026 10:00:00 +0000
 Message-ID: <test-msg-003@gmail.com>
@@ -140,7 +140,7 @@ This is not a university email at all.
  */
 const NO_DKIM_EML = `Delivered-To: student@university.edu
 From: student@university.edu
-To: someone@example.com
+To: notices@university.edu
 Subject: No DKIM
 Date: Thu, 06 Feb 2026 10:00:00 +0000
 Message-ID: <test-msg-004@university.edu>
@@ -159,7 +159,7 @@ const NO_DELIVERED_TO_EML = `DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxe
         bh=base64bodyhash==;
         b=base64signaturedata==;
 From: student123@university.edu
-To: someone@example.com
+To: list@university.edu
 Subject: No Delivered-To
 Date: Thu, 06 Feb 2026 10:00:00 +0000
 Message-ID: <test-msg-005@university.edu>
