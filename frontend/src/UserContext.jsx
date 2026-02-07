@@ -1,5 +1,5 @@
 import { createContext, useState, useEffect } from 'react';
-import { identityManager, membershipTree, reputationManager, snapshotter } from './api';
+import { identityManager, emailVerifier } from './api';
 
 const UserContext = createContext(null);
 export { UserContext };
@@ -24,31 +24,31 @@ export function UserProvider({ children }) {
     }
   }, [user]);
 
-  const createAccount = async () => {
+  /**
+   * Primary account creation: verify .eml → create identity → bind email → register.
+   * This is the ONLY way to create a new account. No unverified accounts exist.
+   */
+  const verifyAndCreateAccount = async (emlContent) => {
+    if (!emlContent) throw new Error('Please upload or paste your .eml file.');
     setLoading(true);
     try {
+      // Step 1: Create a cryptographic identity (keypair) on the backend
       const identity = await identityManager.create();
-      const nullifier = `user_${identity.commitment.substring(0, 12)}`;
 
-      // Add to membership tree
-      await membershipTree.addMember(identity.commitment);
+      // Step 2: Verify email + bind to identity + add to tree + register
+      // This single endpoint does DKIM verification + commitment binding.
+      const data = await emailVerifier.verifyAndRegister(emlContent, identity.exportedKey);
 
-      // Register in reputation system
-      await reputationManager.register(nullifier);
-
-      // Record JOIN in the system
-      await snapshotter.ingest({
-        type: 'JOIN',
-        payload: { commitment: identity.commitment, nullifier, timestamp: Date.now() },
-        timestamp: Date.now(),
-      });
+      const nullifier = `user_${data.commitment.substring(0, 12)}`;
 
       const userData = {
-        commitment: identity.commitment,
+        commitment: data.commitment,
         exportedKey: identity.exportedKey,
         publicKey: identity.publicKey,
         nullifier,
         createdAt: Date.now(),
+        emailVerified: true,
+        verifiedEmail: data.binding?.email || data.email,
       };
       setUser(userData);
       setLoading(false);
@@ -70,7 +70,7 @@ export function UserProvider({ children }) {
 
       // Backend returns { found: true } only if the commitment is in the membership tree
       if (!identity.found) {
-        throw new Error('No account found for this recovery key.');
+        throw new Error('No account found for this recovery key. You must verify your email first to create an account.');
       }
 
       const nullifier = `user_${identity.commitment.substring(0, 12)}`;
@@ -80,8 +80,10 @@ export function UserProvider({ children }) {
         exportedKey: exportedKey.trim(),
         publicKey: identity.publicKey,
         nullifier,
-        createdAt: Date.now(), // We don't have original timestamp, use current
+        createdAt: Date.now(),
         restored: true,
+        // Restored accounts were previously verified (they're in the membership tree)
+        emailVerified: true,
       };
       setUser(userData);
       setLoading(false);
@@ -101,7 +103,7 @@ export function UserProvider({ children }) {
   };
 
   return (
-    <UserContext.Provider value={{ user, loading, createAccount, restoreAccount, updateUser, logout }}>
+    <UserContext.Provider value={{ user, loading, verifyAndCreateAccount, restoreAccount, updateUser, logout }}>
       {children}
     </UserContext.Provider>
   );

@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useUser } from '../useUser';
-import { identityManager, emailVerifier, membershipTree } from '../api';
+import { membershipTree } from '../api';
 
 export default function IdentityPage() {
-  const { user, loading, createAccount, restoreAccount, updateUser, logout } = useUser();
+  const { user, loading, verifyAndCreateAccount, restoreAccount, logout } = useUser();
 
   return (
     <div>
@@ -13,12 +13,10 @@ export default function IdentityPage() {
       </div>
 
       {!user ? (
-        <GettingStarted loading={loading} createAccount={createAccount} restoreAccount={restoreAccount} />
+        <GettingStarted loading={loading} verifyAndCreateAccount={verifyAndCreateAccount} restoreAccount={restoreAccount} />
       ) : (
         <>
           <AccountCard user={user} logout={logout} />
-          <EmailVerifyCard user={user} updateUser={updateUser} />
-          <SignVerifyCard user={user} />
           <AdvancedSection />
         </>
       )}
@@ -26,16 +24,20 @@ export default function IdentityPage() {
   );
 }
 
-/* ── Getting Started (no account yet) ─────────────────────── */
-function GettingStarted({ loading, createAccount, restoreAccount }) {
+/* ── Getting Started — email verification IS account creation ── */
+function GettingStarted({ loading, verifyAndCreateAccount, restoreAccount }) {
   const [showRestore, setShowRestore] = useState(false);
   const [restoreKey, setRestoreKey] = useState('');
+  const [emlContent, setEmlContent] = useState('');
   const [error, setError] = useState('');
+  const [result, setResult] = useState(null);
 
-  const handleCreate = async () => {
-    setError('');
-    try { await createAccount(); }
-    catch (err) { setError(err.message); }
+  const handleVerifyAndCreate = async () => {
+    setError(''); setResult(null);
+    try {
+      const userData = await verifyAndCreateAccount(emlContent);
+      setResult(userData);
+    } catch (err) { setError(err.message); }
   };
 
   const handleRestore = async () => {
@@ -45,50 +47,136 @@ function GettingStarted({ loading, createAccount, restoreAccount }) {
   };
 
   return (
-    <div className="card welcome-card">
-      <div style={{ fontSize: 48, marginBottom: 16 }}>&#9670;</div>
-      <h3 style={{ marginBottom: 8 }}>Welcome to Afwaah</h3>
-      <p style={{ color: '#555', marginBottom: 24, fontSize: 14, lineHeight: 1.6 }}>
-        Create an anonymous account to post rumors, vote on campus news,
-        and build your reputation — all without revealing your identity.
-      </p>
+    <div>
+      {/* Welcome header */}
+      <div className="card welcome-card">
+        <div style={{ fontSize: 48, marginBottom: 16 }}>&#9670;</div>
+        <h3 style={{ marginBottom: 8 }}>Welcome to Afwaah</h3>
+        <p style={{ color: '#555', marginBottom: 8, fontSize: 14, lineHeight: 1.6 }}>
+          Join the anonymous campus rumor network. To create your account, verify your
+          <strong> university email</strong> — this proves you're a student without revealing your identity.
+        </p>
+        <p style={{ color: '#888', fontSize: 12 }}>
+          One university email = one anonymous account. No passwords, no personal data stored.
+        </p>
+      </div>
 
-      <button className="btn btn-primary btn-lg" onClick={handleCreate} disabled={loading}
-        style={{ width: '100%', justifyContent: 'center', padding: '14px 24px', fontSize: 14 }}>
-        {loading ? <><span className="spinner" /> Creating...</> : 'Create Anonymous Account'}
-      </button>
+      {/* Email Verification = Account Creation */}
+      <div className="card">
+        <div className="card-title" style={{ textTransform: 'none', letterSpacing: 0 }}>
+          &#9993; Create Account via University Email
+        </div>
+        <p className="hint" style={{ marginBottom: 12 }}>
+          Upload a <strong>.eml file</strong> from your university inbox.
+          The system cryptographically verifies the DKIM signature to confirm you have access to a university email — then
+          creates your anonymous account automatically.
+        </p>
 
-      <div style={{ margin: '20px 0', fontSize: 13, color: '#888' }}>or</div>
-
-      {!showRestore ? (
-        <button className="btn btn-secondary" onClick={() => setShowRestore(true)}
-          style={{ width: '100%', justifyContent: 'center' }}>
-          I Have a Recovery Key
-        </button>
-      ) : (
-        <div style={{ textAlign: 'left' }}>
-          <div className="form-group">
-            <label>Recovery Key</label>
-            <input type="text" className="input-mono" value={restoreKey}
-              onChange={e => setRestoreKey(e.target.value)}
-              placeholder="Paste your recovery key here..." />
-            <div className="hint">This is the key you saved when you first created your account</div>
-          </div>
-          <div className="btn-group">
-            <button className="btn btn-primary" onClick={handleRestore} disabled={!restoreKey || loading}>
-              Restore Account
-            </button>
-            <button className="btn btn-secondary" onClick={() => setShowRestore(false)}>Cancel</button>
+        <div style={{ background: '#f8f8f8', border: '1px solid var(--border)', borderRadius: 8, padding: 14, marginBottom: 16, fontSize: 13, lineHeight: 1.7 }}>
+          <strong>How to get your .eml file:</strong>
+          <ol style={{ margin: '8px 0 0', paddingLeft: 20 }}>
+            <li>Log into your <strong>university email</strong> inbox (e.g. @seecs.edu.pk)</li>
+            <li>Open <strong>any email</strong> in your inbox</li>
+            <li>In Gmail: click &#8942; → "Download message" → saves as .eml</li>
+            <li>In Outlook: File → Save As → choose .eml format</li>
+            <li><strong>Upload</strong> the .eml file below or paste its contents</li>
+          </ol>
+          <div style={{ marginTop: 8, padding: '8px 10px', background: '#fff3cd', borderRadius: 4, fontSize: 12 }}>
+            <strong>Important:</strong> Do not edit the .eml file. The DKIM cryptographic signature covers the email headers —
+            if even one character is changed, verification fails. This is the same technique Gmail uses to show "signed by seecs.edu.pk".
           </div>
         </div>
-      )}
 
-      {error && <div className="result-box error" style={{ marginTop: 16, textAlign: 'left' }}>{error}</div>}
+        <div className="form-group">
+          <label>Upload .eml File</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <label
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '8px 16px', background: 'var(--accent)', color: '#fff',
+                borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600
+              }}
+            >
+              Choose .eml File
+              <input
+                type="file"
+                accept=".eml"
+                style={{ display: 'none' }}
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = ev => setEmlContent(ev.target.result);
+                  reader.onerror = () => setError('Failed to read file');
+                  reader.readAsText(file);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+            <span style={{ fontSize: 12, color: '#888' }}>
+              {emlContent ? '✓ File loaded — ready to verify' : 'or paste content below'}
+            </span>
+          </div>
+
+          <label>Or Paste .eml Content Manually</label>
+          <textarea rows={5} value={emlContent} onChange={e => setEmlContent(e.target.value)}
+            placeholder={'Paste the entire raw .eml content here...\n\nIt starts with headers like:\nDelivered-To: yourname@seecs.edu.pk\nDKIM-Signature: v=1; a=rsa-sha256; ...'}
+            style={{ fontFamily: 'monospace', fontSize: 12 }} />
+        </div>
+
+        <button className="btn btn-primary btn-lg" onClick={handleVerifyAndCreate}
+          disabled={loading || !emlContent}
+          style={{ width: '100%', justifyContent: 'center', padding: '14px 24px', fontSize: 14 }}>
+          {loading ? <><span className="spinner" /> Verifying & Creating Account...</> : 'Verify Email & Create Account'}
+        </button>
+
+        {result && (
+          <div className="result-box success" style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>&#10003; Account Created!</div>
+            <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+              Your anonymous identity has been created and cryptographically bound to your university email.
+              You can now post rumors, vote, and build your reputation.
+            </div>
+          </div>
+        )}
+
+        {error && <div className="result-box error" style={{ marginTop: 12 }}>{error}</div>}
+      </div>
+
+      {/* Restore existing account */}
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="card-title" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 14 }}>
+          Already have an account?
+        </div>
+        {!showRestore ? (
+          <button className="btn btn-secondary" onClick={() => setShowRestore(true)}
+            style={{ width: '100%', justifyContent: 'center' }}>
+            Restore with Recovery Key
+          </button>
+        ) : (
+          <div>
+            <div className="form-group">
+              <label>Recovery Key</label>
+              <input type="text" className="input-mono" value={restoreKey}
+                onChange={e => setRestoreKey(e.target.value)}
+                placeholder="Paste your recovery key here..." />
+              <div className="hint">This is the key you saved when you first created your account</div>
+            </div>
+            <div className="btn-group">
+              <button className="btn btn-primary" onClick={handleRestore} disabled={!restoreKey || loading}>
+                {loading ? <><span className="spinner" /> Restoring...</> : 'Restore Account'}
+              </button>
+              <button className="btn btn-secondary" onClick={() => setShowRestore(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+        {!showRestore && error && <div className="result-box error" style={{ marginTop: 12 }}>{error}</div>}
+      </div>
     </div>
   );
 }
 
-/* ── Account Card (logged in) ─────────────────────────────── */
+/* ── Account Card (logged in — always verified) ───────────── */
 function AccountCard({ user, logout }) {
   const [showKey, setShowKey] = useState(false);
   const [copied, setCopied] = useState('');
@@ -104,7 +192,7 @@ function AccountCard({ user, logout }) {
       <div className="card-title" style={{ textTransform: 'none', letterSpacing: 0 }}>
         <span style={{ fontSize: 20 }}>&#9670;</span>
         <span>Your Anonymous Account</span>
-        <span className="badge active-badge">Active</span>
+        <span className="badge active-badge">Verified</span>
       </div>
 
       <div className="account-info-grid">
@@ -121,15 +209,24 @@ function AccountCard({ user, logout }) {
           <div className="account-value">{new Date(user.createdAt).toLocaleDateString()}</div>
         </div>
 
+        {user.verifiedEmail && (
+          <div className="account-field">
+            <div className="account-label">Verified Email</div>
+            <div className="account-value" style={{ fontSize: 13 }}>
+              &#10003; {user.verifiedEmail}
+            </div>
+          </div>
+        )}
+
         <div className="account-field full-width">
           <div className="account-label">
             Recovery Key
             <span style={{ color: '#c00', marginLeft: 8, fontSize: 11, fontWeight: 400 }}>
-              ⚠ Save this — only way to recover your account
+              &#9888; Save this — only way to recover your account
             </span>
           </div>
           <div className="account-value mono" style={{ fontSize: 12, wordBreak: 'break-all' }}>
-            {showKey ? user.exportedKey : '•'.repeat(40)}
+            {showKey ? user.exportedKey : '\u2022'.repeat(40)}
           </div>
           <div className="btn-group" style={{ marginTop: 8 }}>
             <button className="btn-copy" onClick={() => setShowKey(!showKey)}>
@@ -149,260 +246,6 @@ function AccountCard({ user, logout }) {
   );
 }
 
-/* ── Email Verification (.eml) — main card ────────────────── */
-function EmailVerifyCard({ user, updateUser }) {
-  const [emlContent, setEmlContent] = useState('');
-  const [result, setResult] = useState(null);
-  const [bindingResult, setBindingResult] = useState(null);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handleVerify = async () => {
-    setLoading(true); setError(''); setResult(null); setBindingResult(null);
-    try { setResult(await emailVerifier.verifyEmail(emlContent)); }
-    catch (err) { setError(err.message); }
-    setLoading(false);
-  };
-
-  // Combined: verify DKIM + bind email to identity commitment (1 email = 1 identity)
-  const handleVerifyAndBind = async () => {
-    if (!user?.exportedKey) { setError('No account found. Create an account first.'); return; }
-    setLoading(true); setError(''); setResult(null); setBindingResult(null);
-    try {
-      const data = await emailVerifier.verifyAndRegister(emlContent, user.exportedKey);
-      setResult(data.dkimResult);
-      setBindingResult(data.binding);
-      // Mark user as email-verified so they can post and vote
-      updateUser({ emailVerified: true, verifiedEmail: data.binding?.email });
-    } catch (err) { setError(err.message); }
-    setLoading(false);
-  };
-
-  return (
-    <div className="card">
-      <div className="card-title" style={{ textTransform: 'none', letterSpacing: 0 }}>
-        &#9993; Verify Your University Email
-      </div>
-      <p className="hint" style={{ marginBottom: 12 }}>
-        Prove you have a campus email using DKIM verification. This checks the cryptographic
-        signature in the email headers — your address stays private.
-      </p>
-
-      <div style={{ background: '#f8f8f8', border: '1px solid var(--border)', borderRadius: 8, padding: 14, marginBottom: 16, fontSize: 13, lineHeight: 1.7 }}>
-        <strong>How to get your .eml file:</strong>
-        <ol style={{ margin: '8px 0 0', paddingLeft: 20 }}>
-          <li>Log into your <strong>university email</strong> inbox (e.g. @seecs.edu.pk)</li>
-          <li>Open <strong>any email</strong> in your inbox (sent to you or by you)</li>
-          <li>In Gmail: click ⋮ → "Download message" → saves as .eml</li>
-          <li>In Outlook: File → Save As → choose .eml format</li>
-          <li><strong>Upload</strong> the .eml file using the button below, or open it in Notepad → Select All → Copy → Paste</li>
-        </ol>
-        <div style={{ marginTop: 8, padding: '8px 10px', background: '#fff3cd', borderRadius: 4, fontSize: 12 }}>
-          <strong>⚠ Critical:</strong> You must paste the <strong>complete</strong> .eml file — do not remove or edit any part,
-          including large blocks of random characters (those are attachments). The system uses <strong>DKIM cryptographic verification</strong>:
-          it fetches the sender's RSA public key from DNS and verifies the digital signature. If even one character
-          is changed, the verification will fail. This same technique is what Gmail shows as "signed by seecs.edu.pk".
-        </div>
-        <div style={{ marginTop: 6, padding: '8px 10px', background: '#e3f2fd', borderRadius: 4, fontSize: 12 }}>
-          <strong>Why from your university inbox?</strong> The "Delivered-To" header proves which inbox the .eml was downloaded from.
-          If someone downloads your email from their Gmail inbox and tries to use it, the system will detect it's from a Gmail inbox and reject it.
-        </div>
-      </div>
-
-      <div className="form-group">
-        <label>Upload .eml File</label>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <label
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '8px 16px', background: 'var(--accent)', color: '#fff',
-              borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600
-            }}
-          >
-            📎 Choose .eml File
-            <input
-              type="file"
-              accept=".eml"
-              style={{ display: 'none' }}
-              onChange={e => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = ev => setEmlContent(ev.target.result);
-                reader.onerror = () => setError('Failed to read file');
-                reader.readAsText(file);
-                // reset so the same file can be re-selected
-                e.target.value = '';
-              }}
-            />
-          </label>
-          <span style={{ fontSize: 12, color: '#888' }}>
-            {emlContent ? '✓ File loaded — ready to verify' : 'or paste content below'}
-          </span>
-        </div>
-
-        <label>Or Paste .eml Content Manually</label>
-        <textarea rows={6} value={emlContent} onChange={e => setEmlContent(e.target.value)}
-          placeholder={'Paste the entire raw .eml content here...\n\nIt starts with headers like:\nFrom: yourname@seecs.edu.pk\nDKIM-Signature: v=1; a=rsa-sha256; d=seecs.edu.pk; ...'}
-          style={{ fontFamily: 'monospace', fontSize: 12 }} />
-      </div>
-      <div className="btn-group">
-        <button className="btn btn-primary" onClick={handleVerifyAndBind} disabled={loading || !emlContent}>
-          {loading ? <><span className="spinner" /> Verifying...</> : '🔗 Verify & Bind to My Identity'}
-        </button>
-        <button className="btn btn-secondary" onClick={handleVerify} disabled={loading || !emlContent}>
-          Verify Only
-        </button>
-      </div>
-
-      {bindingResult && (
-        <div className="result-box success" style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>🔗 Email → Identity Bound!</div>
-          <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-            <div><strong>Email:</strong> {bindingResult.email}</div>
-            <div><strong>Commitment:</strong> <span className="mono" style={{ fontSize: 11 }}>{bindingResult.commitment}</span></div>
-            <div style={{ marginTop: 8, padding: '8px 10px', background: '#e8f5e9', borderRadius: 4, fontSize: 12 }}>
-              <strong>Cryptographic binding established:</strong> This university email is now permanently linked
-              to your anonymous identity. The same email cannot be used to create another identity (1 email = 1 identity).
-            </div>
-          </div>
-        </div>
-      )}
-
-      {result && !bindingResult && (
-        <div className="result-box success" style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>✓ Email Cryptographically Verified!</div>
-          <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-            <div><strong>Inbox Owner:</strong> {result.deliveredTo || result.domain}</div>
-            <div><strong>From:</strong> {result.from}</div>
-            <div><strong>DKIM Signature:</strong> <span style={{ color: '#080', fontWeight: 600 }}>{result.dkimStatus === 'pass' ? '✓ PASS' : result.dkimStatus || 'N/A'}</span> (d={result.signingDomain})</div>
-            <div><strong>Message ID:</strong> {result.messageId}</div>
-            <div style={{ marginTop: 10, padding: '8px 10px', background: '#e8f5e9', borderRadius: 4, fontSize: 12 }}>
-              <strong>3-Layer Verification Passed:</strong><br />
-              1. ✓ <strong>DKIM Crypto:</strong> RSA signature verified against DNS public key — headers not tampered<br />
-              2. ✓ <strong>DKIM Domain:</strong> Signing domain ({result.signingDomain}) is an authorized university<br />
-              3. ✓ <strong>Inbox Ownership:</strong> .eml downloaded from a university inbox ({result.deliveredTo})
-            </div>
-          </div>
-        </div>
-      )}
-      {error && <div className="result-box error" style={{ marginTop: 12 }}>{error}</div>}
-    </div>
-  );
-}
-
-/* ── Sign & Verify messages — main card ───────────────────── */
-function SignVerifyCard({ user }) {
-  const [message, setMessage] = useState('');
-  const [signature, setSignature] = useState('');
-  const [pubKey, setPubKey] = useState('');
-  const [signResult, setSignResult] = useState(null);
-  const [verifyResult, setVerifyResult] = useState(null);
-  const [error, setError] = useState('');
-  const [copied, setCopied] = useState('');
-
-  const copyText = (text, label) => {
-    navigator.clipboard.writeText(text);
-    setCopied(label);
-    setTimeout(() => setCopied(''), 2000);
-  };
-
-  const handleSign = async () => {
-    setError(''); setSignResult(null);
-    try {
-      const data = await identityManager.signMessage(user.exportedKey, message);
-      // signature comes as a JSON string from the backend
-      const sig = typeof data.signature === 'object' ? JSON.stringify(data.signature) : String(data.signature);
-      setSignResult(sig);
-      setSignature(sig);
-      // publicKey comes as ["bigint1","bigint2"] array from sign response
-      const pk = data.publicKey
-        ? JSON.stringify(data.publicKey)
-        : (typeof user.publicKey === 'object' ? JSON.stringify(user.publicKey) : String(user.publicKey));
-      setPubKey(pk);
-    } catch (err) { setError(err.message); }
-  };
-
-  const handleVerify = async () => {
-    setError(''); setVerifyResult(null);
-    try {
-      const data = await identityManager.verifySignature(message, signature, pubKey);
-      setVerifyResult(data);
-    } catch (err) { setError(err.message); }
-  };
-
-  return (
-    <div className="card">
-      <div className="card-title" style={{ textTransform: 'none', letterSpacing: 0 }}>
-        &#9999; Sign & Verify Messages
-      </div>
-      <p className="hint" style={{ marginBottom: 12 }}>
-        Cryptographically sign any message to prove <strong>you</strong> wrote it, without revealing your real identity.
-        Others can verify your signature using your public key.
-      </p>
-
-      <div style={{ background: '#f8f8f8', border: '1px solid var(--border)', borderRadius: 8, padding: 14, marginBottom: 16, fontSize: 13, lineHeight: 1.7 }}>
-        <strong>How it works:</strong>
-        <ol style={{ margin: '8px 0 0', paddingLeft: 20 }}>
-          <li>Type any message below and click "Sign with My Key"</li>
-          <li>Your private key creates a unique <strong>signature</strong> (a cryptographic proof)</li>
-          <li>Share the message + signature + your public key with anyone</li>
-          <li>They paste all three below and click "Verify" to confirm you wrote it</li>
-        </ol>
-      </div>
-
-      {/* Step 1: Sign */}
-      <h4 style={{ marginBottom: 8, fontSize: 14 }}>Step 1 — Sign a Message</h4>
-      <div className="form-group">
-        <label>Your Message</label>
-        <input type="text" value={message} onChange={e => setMessage(e.target.value)}
-          placeholder='e.g. "I confirm this rumor is true"' />
-      </div>
-      <button className="btn btn-primary" onClick={handleSign} disabled={!message}>Sign with My Key</button>
-
-      {signResult && (
-        <div className="result-box success" style={{ marginTop: 12 }}>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>✓ Signed!</div>
-          <div style={{ fontSize: 12, marginBottom: 4 }}><strong>Signature</strong> (auto-filled below):</div>
-          <div style={{ fontFamily: 'monospace', fontSize: 11, wordBreak: 'break-all', background: '#fff', padding: 8, borderRadius: 4, border: '1px solid #ddd' }}>
-            {signResult}
-          </div>
-          <button className="btn-copy" style={{ marginTop: 6 }} onClick={() => copyText(signResult, 'sig')}>
-            {copied === 'sig' ? '✓ Copied' : 'Copy Signature'}
-          </button>
-        </div>
-      )}
-
-      {/* Step 2: Verify */}
-      <div style={{ borderTop: '1px solid var(--border)', marginTop: 24, paddingTop: 20 }}>
-        <h4 style={{ marginBottom: 8, fontSize: 14 }}>Step 2 — Verify a Signature</h4>
-        <p className="hint" style={{ marginBottom: 12 }}>
-          These fields auto-fill after signing. To verify someone else's message, paste their signature and public key here.
-        </p>
-        <div className="form-group">
-          <label>Signature</label>
-          <input type="text" className="input-mono" value={signature} onChange={e => setSignature(e.target.value)}
-            placeholder="Paste a signature here..." style={{ fontSize: 11 }} />
-        </div>
-        <div className="form-group">
-          <label>Public Key</label>
-          <input type="text" className="input-mono" value={pubKey} onChange={e => setPubKey(e.target.value)}
-            placeholder="Paste the signer's public key here..." style={{ fontSize: 11 }} />
-        </div>
-        <button className="btn btn-secondary" onClick={handleVerify} disabled={!message || !signature || !pubKey}>
-          Verify Signature
-        </button>
-        {verifyResult !== null && (
-          <div className={`result-box ${verifyResult.valid ? 'success' : 'error'}`} style={{ marginTop: 12 }}>
-            {verifyResult.valid ? '✓ Valid — this person wrote the message' : '✗ Invalid — the signature does not match'}
-          </div>
-        )}
-      </div>
-      {error && <div className="result-box error" style={{ marginTop: 12 }}>{error}</div>}
-    </div>
-  );
-}
-
 /* ── Advanced Tools (collapsed by default) ────────────────── */
 function AdvancedSection() {
   const [expanded, setExpanded] = useState(false);
@@ -413,7 +256,7 @@ function AdvancedSection() {
         <div className="card-title" style={{ marginBottom: 0 }}>
           Advanced Identity Tools
         </div>
-        <span className="collapse-icon">{expanded ? '▲' : '▼'}</span>
+        <span className="collapse-icon">{expanded ? '&#9650;' : '&#9660;'}</span>
       </div>
 
       {expanded && (

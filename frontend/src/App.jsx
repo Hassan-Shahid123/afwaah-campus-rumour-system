@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { UserProvider } from './UserContext';
 import { useUser } from './useUser';
 import IdentityPage from './pages/IdentityPage';
@@ -16,6 +16,15 @@ export default function App() {
       </UserProvider>
     </BrowserRouter>
   );
+}
+
+/* Gate routes behind email verification */
+function ProtectedRoute({ children }) {
+  const { user } = useUser();
+  if (!user?.emailVerified) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
 }
 
 function AppLayout() {
@@ -62,9 +71,9 @@ function AppLayout() {
         <Routes>
           <Route path="/" element={<IdentityPage />} />
           <Route path="/network" element={<NetworkPage />} />
-          <Route path="/rumors" element={<RumorsPage />} />
-          <Route path="/scoring" element={<ScoringPage />} />
-          <Route path="/state" element={<StatePage />} />
+          <Route path="/rumors" element={<ProtectedRoute><RumorsPage /></ProtectedRoute>} />
+          <Route path="/scoring" element={<ProtectedRoute><ScoringPage /></ProtectedRoute>} />
+          <Route path="/state" element={<ProtectedRoute><StatePage /></ProtectedRoute>} />
         </Routes>
       </main>
     </div>

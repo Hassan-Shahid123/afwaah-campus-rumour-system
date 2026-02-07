@@ -27,6 +27,11 @@
 //            AND must be an allowed university inbox.
 //            Cross-validates unsigned headers against each other to
 //            detect manual tampering.
+//   LAYER 4: Delivered-To must match a DKIM-signed To/Cc header.
+//            To/Cc ARE covered by DKIM h= (they are signed), so editing
+//            them breaks DKIM verification. This creates an unforgeable
+//            anchor: even if Delivered-To AND Received are both edited
+//            consistently, they won't match the immutable signed To/Cc.
 // ─────────────────────────────────────────────────────────────
 
 import { simpleParser } from 'mailparser';
@@ -133,6 +138,12 @@ export class EmailVerifier {
     const receivedForAddresses = this._extractReceivedForAddresses(raw);
     const recipientCrossCheck = this._crossValidateRecipient(deliveredTo, receivedForAddresses);
 
+    // ─── Extract DKIM-signed recipient addresses (To/Cc) ─────────
+    // To and Cc ARE listed in DKIM h= (signed headers). Editing them
+    // breaks the DKIM signature. This is the unforgeable anchor.
+    const signedRecipients = this._extractSignedRecipients(parsed);
+    const signedHeaderCheck = this._validateAgainstSignedHeaders(deliveredTo, signedRecipients);
+
     // Extract the sender (From) for display
     const fromAddress = parsed.from?.value?.[0]?.address;
     if (!fromAddress) {
@@ -192,13 +203,16 @@ export class EmailVerifier {
     // CHECK 3: DKIM signature must CRYPTOGRAPHICALLY pass
     const dkimCryptoValid = dkimStatus === 'pass';
 
-    // ALL FOUR checks must pass:
+    // ALL FIVE checks must pass:
     // 1. Delivered-To is a university inbox (proves who downloaded it)
     // 2. DKIM signing domain is a university domain
     // 3. DKIM signature cryptographically verifies (proves headers were NOT edited)
     // 4. Delivered-To cross-validates against Received "for <>" headers
     //    (catches manual Delivered-To tampering — since DKIM doesn't sign it)
-    const isValid = recipientValid && dkimDomainValid && dkimCryptoValid && recipientCrossCheck.consistent;
+    // 5. Delivered-To matches a DKIM-signed To/Cc header
+    //    (unforgeable anchor — editing To/Cc breaks DKIM verification)
+    const isValid = recipientValid && dkimDomainValid && dkimCryptoValid
+      && recipientCrossCheck.consistent && signedHeaderCheck.consistent;
 
     return {
       domain: recipientDomain || fromAddress.split('@')[1]?.toLowerCase() || '',
@@ -214,6 +228,8 @@ export class EmailVerifier {
       dkimInfo,
       recipientCrossCheck,       // expose cross-validation details
       receivedForAddresses,      // expose all Received "for <>" addresses
+      signedHeaderCheck,         // expose To/Cc signed-header validation
+      signedRecipients,          // expose DKIM-signed To/Cc addresses
     };
   }
 
@@ -274,6 +290,16 @@ export class EmailVerifier {
     // don't match, the Delivered-To has been tampered with.
     if (dkimResult.recipientCrossCheck && !dkimResult.recipientCrossCheck.consistent) {
       errors.push(`E009: ${dkimResult.recipientCrossCheck.details}`);
+    }
+
+    // CHECK: Cross-validate Delivered-To against DKIM-signed To/Cc headers
+    // To and Cc headers ARE signed by DKIM (in the h= field). Editing them
+    // would break the DKIM signature. If Delivered-To doesn't match any
+    // signed To/Cc address, the Delivered-To header was forged.
+    // This catches the attack where BOTH Delivered-To AND Received "for <>"
+    // headers are edited consistently (since neither is DKIM-signed).
+    if (dkimResult.signedHeaderCheck && !dkimResult.signedHeaderCheck.consistent) {
+      errors.push(`E010: ${dkimResult.signedHeaderCheck.details}`);
     }
 
     return {
@@ -380,6 +406,75 @@ export class EmailVerifier {
     return {
       consistent: false,
       details: `Delivered-To "${deliveredTo}" does NOT match any Received "for" header: [${receivedForAddresses.join(', ')}]. The Delivered-To header appears to have been manually edited.`,
+    };
+  }
+
+  /**
+   * Extract all recipient addresses from the DKIM-signed To and Cc headers.
+   * These headers ARE covered by the DKIM h= field. Editing them breaks
+   * the DKIM signature, so they serve as an immutable reference.
+   * 
+   * @private
+   * @param {Object} parsed - Result from simpleParser()
+   * @returns {string[]} Lowercased email addresses from To/Cc
+   */
+  _extractSignedRecipients(parsed) {
+    const addresses = [];
+
+    // Extract from To header
+    if (parsed.to?.value) {
+      for (const addr of parsed.to.value) {
+        if (addr.address) addresses.push(addr.address.toLowerCase());
+      }
+    }
+
+    // Extract from Cc header
+    if (parsed.cc?.value) {
+      for (const addr of parsed.cc.value) {
+        if (addr.address) addresses.push(addr.address.toLowerCase());
+      }
+    }
+
+    return [...new Set(addresses)]; // deduplicate
+  }
+
+  /**
+   * Validate Delivered-To against the DKIM-signed To/Cc headers.
+   * This is the unforgeable anchor: To/Cc are signed by DKIM,
+   * so editing them breaks the DKIM signature. If Delivered-To
+   * doesn't match any signed recipient, it was tampered with.
+   *
+   * This catches the sophisticated attack where an attacker edits
+   * BOTH Delivered-To AND Received "for <>" headers consistently —
+   * since neither is DKIM-signed, they can be freely changed. But
+   * To/Cc CANNOT be changed without breaking DKIM verification.
+   *
+   * @private
+   * @param {string} deliveredTo - The Delivered-To address (unsigned)
+   * @param {string[]} signedRecipients - Addresses from DKIM-signed To/Cc
+   * @returns {{ consistent: boolean, details: string }}
+   */
+  _validateAgainstSignedHeaders(deliveredTo, signedRecipients) {
+    if (!deliveredTo) {
+      return { consistent: false, details: 'No Delivered-To header found' };
+    }
+    if (signedRecipients.length === 0) {
+      // Rare: if both To and Cc are missing, we rely on other checks
+      return { consistent: true, details: 'No signed To/Cc recipients to cross-check (allowed)' };
+    }
+
+    const deliveredToLower = deliveredTo.toLowerCase();
+    const matchesAny = signedRecipients.some(addr => addr === deliveredToLower);
+
+    if (matchesAny) {
+      return { consistent: true, details: 'Delivered-To matches DKIM-signed To/Cc header' };
+    }
+
+    return {
+      consistent: false,
+      details: `Delivered-To "${deliveredTo}" does NOT match any DKIM-signed To/Cc address: [${signedRecipients.join(', ')}]. `
+        + `The To/Cc headers are cryptographically signed by DKIM and cannot be forged. `
+        + `This means the Delivered-To header was manually edited to a different address.`,
     };
   }
 
