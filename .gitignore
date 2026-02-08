@@ -36,3 +36,7 @@ npm-debug.log*
 
 # Demo files
 backend/demo-*.js
+
+
+# .eml file
+*.eml
