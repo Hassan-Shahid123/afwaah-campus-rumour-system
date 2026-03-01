@@ -2,7 +2,7 @@
 
 Welcome to the official documentation for Afwaah. This documentation is organized into two main sections:
 
-1.  **[User & Contributor Guide](./guide/README.md)**
+1.  **[User Guide](./guide/README.md)**
     - A narrative-style guide designed to get you started. It covers what Afwaah is, how it works from a high level, and how to set up your development environment. If you're new to the project, start here.
 
 2.  **[Technical Reference](./reference/README.md)**
