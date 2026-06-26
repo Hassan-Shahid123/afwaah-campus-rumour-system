@@ -36,7 +36,7 @@ For each voter $i$, construct a feature vector across all rumors they've voted o
 
 $$\vec{f}_i = [vote_{r_1}, vote_{r_2}, ..., vote_{r_k}]$$
 
-where $vote_{r_j} \in \{-1, 0, 1\}$ for `FALSE`, `UNVERIFIED`, `TRUE`.
+where $vote_{r_j} \in \{-1, 0, 1, ... \}$ for `FALSE`, `UNVERIFIED`, `TRUE`, ... .
 
 **Step 2: Compute pairwise correlation**
 
@@ -247,7 +247,6 @@ INITIAL_SCORE = 10
      │      └── BTS score > 0 → reputation += score × multiplier
      │      └── BTS score < 0 → reputation -= |score| × multiplier
      │
-     ├── Provide Official Proof → bonus reputation
      │
      └── Time decay: score *= DECAY_RATE every epoch
 ```
@@ -259,7 +258,6 @@ INITIAL_SCORE = 10
 | Post rumor | 5 | 50% of score | Until rumor is scored |
 | Vote on rumor | 1 | 25% of score | Until rumor is scored |
 | Dispute rumor | 3 | 50% of score | Until resolution |
-| Provide evidence | 0 | N/A | No lockup |
 
 ### 5.3 Slashing Conditions
 
@@ -323,7 +321,7 @@ class ReputationManager {
 
 ### 6.1 Purpose
 
-Allow each device to compute a **subjective** trust ranking based on its own "trust seeds." This prevents any single entity (including the university) from dictating truth globally.
+Allow each device to compute a **subjective** trust ranking based on its own "trust seeds."
 
 ### 6.2 Algorithm
 
@@ -348,70 +346,7 @@ Nodes in the trust graph are voter identities (represented by nullifier-derived 
 
 Edge weight = sum of co-correct BTS scores.
 
-### 6.4 Personalization Vector
 
-Each device defines its own personalization vector $\vec{p}$:
-
-```javascript
-// Default: trust all verified students equally
-const defaultSeeds = { '*': 1.0 / N };
-
-// Custom: trust student witnesses more than admin signals
-const customSeeds = {
-  'student_verified': 0.7,
-  'admin_verified': 0.2,
-  'official_proof': 0.1
-};
-
-// Blocking: remove university's influence entirely
-const blockingSeeds = {
-  'student_verified': 0.9,
-  'admin_verified': 0.0,    // blocked
-  'official_proof': 0.1
-};
-```
-
-### 6.5 Subjective Epistemic Forks
-
-Because PPR is computed locally, two students with different trust seeds will see different trust scores for the same rumor. This is by design:
-
-- Student A trusts the university → sees admin-confirmed rumors as high-trust
-- Student B distrusts the university → sees the same rumors as low-trust
-- Neither is "wrong" — the system respects subjective epistemic sovereignty
-
-### 6.6 Implementation Interface
-
-```javascript
-class TrustPropagator {
-  constructor(dampingFactor = 0.85, maxIterations = 100, tolerance = 1e-6) {}
-
-  /**
-   * Build trust graph from vote history
-   * @param {Map<string, Vote[]>} voteHistory
-   * @param {Map<string, BTSResult>} scoreHistory
-   * @returns {TrustGraph}
-   */
-  buildGraph(voteHistory, scoreHistory) → TrustGraph
-
-  /**
-   * Compute Personalized PageRank
-   * @param {TrustGraph} graph
-   * @param {Map<string, number>} trustSeeds - personalization vector
-   * @returns {Map<string, number>} - PPR scores per voter
-   */
-  computePPR(graph, trustSeeds) → Map<string, number>
-
-  /**
-   * Get final weighted trust score for a rumor
-   * @param {string} rumorId
-   * @param {Map<string, number>} pprScores
-   * @returns {number} - 0-100 trust score
-   */
-  getRumorTrust(rumorId, pprScores) → number
-}
-```
-
----
 
 ## 7. Scoring Pipeline (End-to-End)
 
@@ -454,7 +389,5 @@ When a new vote arrives for a rumor, the full scoring pipeline runs:
 | Only 1-2 voters on a rumor | Score remains "UNVERIFIED"; no BTS/RBTS runs |
 | All voters agree (ρ = 1.0) | No dampening needed (same opinion ≠ coordination) unless cross-rumor pattern exists |
 | Voter has score = 0 | Cannot vote (insufficient stake); recovers slowly |
-| Official proof contradicts majority | BTS math rewards the minority who were correct; majority gets slashed |
-| log(0) in BTS formula | Predictions are floored at ε = 0.001 to avoid -∞ |
 | Tombstoned rumor receives vote | Vote is rejected (E010) |
 | Two rumors about same topic | Scored independently; reputation carries across |

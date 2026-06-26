@@ -242,9 +242,9 @@ NETWORK: {
 
 ---
 
-## Full Pipeline (Phase 4 in Action)
+## Full Pipeline 
 
-Here's how all Phase 4 modules work together in a real scenario:
+Here's how all modules work together in a real scenario:
 
 ```
 Scenario: Student deletes a rumor they posted yesterday
@@ -298,7 +298,3 @@ All 80 tests should pass, covering:
 | `scoring/trust-propagator.js` | `TrustPropagator` | Personalized PageRank for subjective trust |
 | `network/anti-entropy.js` | `AntiEntropySync` | Merkle diff sync for reconnecting nodes |
 | `tests/integration.test.js` | — | 80 integration tests covering all Phase 4 modules + full pipeline |
-
----
-
-**← Back**: [Phase 3 — Scoring Engine](./04-SCORING-ENGINE.md) | [All Guides](./README.md)

@@ -24,6 +24,4 @@ Welcome to the official documentation for Afwaah. This documentation is organize
 - [03: Scoring Engine Specification](./reference/03-scoring-engine.md)
 - [04: Identity & Membership](./reference/04-identity.md)
 - [05: P2P Network & Storage](./reference/05-network-storage.md)
-- [06: Scoring Logic & Reputation](./reference/06-scoring-logic.md)
-- [07: Security & State](./reference/07-security-state.md)
-- [08: System Justification](./reference/08-system-justification.md)
+- [06: Security & State](./reference/06-security-state.md)

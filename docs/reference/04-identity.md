@@ -110,9 +110,8 @@ To add your university's domain, edit `ALLOWED_DOMAINS` before running.
 
 ### How to export a .eml file
 
-1. **Gmail**: Open email → Three dots (⋮) → "Show original" → "Download Original"
-2. **Outlook**: Open email → File → Save As → choose `.eml` format
-3. **Thunderbird**: Right-click email → "Save As" → `.eml`
+ **Gmail**: Open email → Three dots (⋮) → "Show original" → "Download Original"
+ **Others**: See the exact procedure for your email client online
 
 ---
 
@@ -222,22 +221,3 @@ console.log(`Restored commitment matches? ${restored.commitment === students[0].
 ```
 
 ---
-
-## Running the Tests
-
-```bash
-cd backend
-npm run test:identity
-```
-
-All 32 tests should pass, covering:
-- Identity creation (random & deterministic)
-- Identity serialization/deserialization
-- Email DKIM parsing & domain validation
-- Merkle tree operations (add, remove, proof, verify)
-- Root history tracking
-- Edge cases & error handling
-
----
-
-**Next**: [Phase 2 — P2P Network & Storage →](./03-P2P-NETWORK-AND-STORAGE.md)

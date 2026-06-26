@@ -19,11 +19,5 @@ This section contains the detailed technical documentation for the Afwaah projec
 - **[05: P2P Network & Storage](./05-network-storage.md)**
   - Details on the libp2p and OrbitDB/Helia implementation, covering node setup, gossipsub controllers, and decentralized database management.
 
-- **[06: Scoring Logic & Reputation](./06-scoring-logic.md)**
-  - Implementation details of the scoring and reputation engines.
-
-- **[07: Security & State](./07-security-state.md)**
+- **[06: Security & State](./06-security-state.md)**
   - Information on the system's security features, including tombstone deletions for handling content removal, state snapshots for recovery, and anti-entropy for data synchronization.
-
-- **[08: System Justification](./08-system-justification.md)**
-  - A document outlining the design choices and justifications for the technologies and approaches used in the project.

@@ -2,7 +2,7 @@
 
 > **Version:** 1.0  
 > **System:** Decentralized Campus Rumor Verification Infrastructure  
-> **Scope:** Backend / Protocol Layer Only
+> **Scope:** Backend / Protocol Layer plus basic frontend. The focus is not on UI/ UX.
 
 ---
 
@@ -409,9 +409,7 @@ Device (runs independently on every phone)
 | Double Voting | Vote multiple times on same rumor | Nullifier hash collision detection |
 | Coordinated Lying | Botnet floods "True" votes | Correlation dampening ($W_G$) |
 | Traffic Analysis | Monitor Wi-Fi to identify posters | Noise encryption + ZK proofs |
-| Admin Takeover | University manipulates truth | Personalized PageRank + subjective forks |
 | Ghost Reputation | Deleted rumors leave phantom trust | OpLog re-traversal + tombstones |
-| Eclipse Attack | Isolate a node from honest peers | Kademlia DHT + multiple discovery mechanisms |
 
 ### 5.2 Encryption Stack
 
@@ -444,7 +442,6 @@ The system operates under **AP** (Availability + Partition Tolerance) from the C
 | Node reconnects | Anti-entropy Merkle diff sync, read-repair |
 | Score disagreement | Expected — each device has subjective trust seeds |
 | Network partition | Both partitions continue operating independently |
-| Partition heals | CRDT merge — no conflicts in append-only logs |
 
 ---
 

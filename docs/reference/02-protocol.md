@@ -1,7 +1,6 @@
 # Afwaah — Protocol Specification
 
-> **Version:** 1.0  
-> **Status:** Draft  
+> **Version:** 1.0   
 > **Scope:** Wire protocol, message formats, gossip topics, validation rules
 
 ---
@@ -161,43 +160,7 @@ Broadcast to logically delete a rumor (append-only — the original data persist
 
 ---
 
-### 2.5 OfficialProofMessage
-
-Broadcast when a student injects an official university statement as evidence.
-
-```json
-{
-  "type": "OFFICIAL_PROOF",
-  "version": "1.0",
-  "payload": {
-    "rumorId": "CID-of-related-rumor",
-    "emailProof": {
-      "domain": "admin.university.edu",
-      "subject": "Official: Friday classes confirmed",
-      "proof": "base64-encoded-zk-email-proof",
-      "publicSignals": ["..."]
-    },
-    "impact": "CONTRADICTS",
-    "zkProof": {
-      "proof": "base64-encoded-semaphore-proof",
-      "merkleRoot": "0x...",
-      "nullifierHash": "0x...",
-      "externalNullifier": "0x..."
-    },
-    "timestamp": 1738800240000
-  }
-}
-```
-
-**Validation Rules:**
-1. Both `emailProof` and `zkProof` (Semaphore) must verify
-2. `emailProof.domain` must be in the trusted admin domains list
-3. `impact` must be one of: `"CONFIRMS"`, `"CONTRADICTS"`, `"NEUTRAL"`
-4. `rumorId` must reference an existing rumor
-
----
-
-### 2.6 SyncRequest / SyncResponse
+### 2.5 SyncRequest / SyncResponse
 
 Used for anti-entropy synchronization when a node reconnects.
 
@@ -409,24 +372,3 @@ const PROTOCOL_CONFIG = {
   PEER_SCORE_DECAY: 0.99,            // libp2p peer scoring decay
 };
 ```
-
----
-
-## 7. Error Codes
-
-| Code | Name | Description |
-|------|------|-------------|
-| `E001` | `INVALID_ZK_PROOF` | Semaphore proof verification failed |
-| `E002` | `DUPLICATE_NULLIFIER` | This nullifier has already been used |
-| `E003` | `INVALID_DKIM` | DKIM proof verification failed |
-| `E004` | `UNKNOWN_DOMAIN` | Email domain not in allowed list |
-| `E005` | `DUPLICATE_COMMITMENT` | Identity commitment already registered |
-| `E006` | `STALE_MERKLE_ROOT` | Merkle root not in recent root history |
-| `E007` | `INSUFFICIENT_STAKE` | Trust score below minimum for this action |
-| `E008` | `INVALID_PREDICTION` | Prediction values don't sum to 1.0 |
-| `E009` | `RUMOR_NOT_FOUND` | Referenced rumor CID doesn't exist |
-| `E010` | `RUMOR_TOMBSTONED` | Referenced rumor has been logically deleted |
-| `E011` | `UNAUTHORIZED_TOMBSTONE` | Tombstone sender is not the original author |
-| `E012` | `MESSAGE_TOO_LARGE` | Message exceeds MAX_MESSAGE_SIZE |
-| `E013` | `INVALID_VOTE_VALUE` | Vote is not TRUE/FALSE/UNVERIFIED |
-| `E014` | `SCHEMA_VIOLATION` | Message doesn't match expected schema |

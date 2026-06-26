@@ -166,7 +166,7 @@ The GossipController automatically validates all incoming messages:
 - **Votes**: Must have `rumorId`, valid `vote` (TRUE/FALSE/UNVERIFIED), `prediction`, `nullifier`, `zkProof`
 - **Nullifier dedup**: Same nullifier is rejected on re-publish (prevents double-posting)
 
-Invalid messages are silently dropped.
+Invalid messages are blocked.
 
 ---
 
@@ -357,20 +357,6 @@ node demo-network.js
 
 ---
 
-## GossipSub Topics
-
-All messages are published on protocol-specific topics:
-
-| Topic | Purpose |
-|-------|---------|
-| `/afwaah/rumors/1.0` | New rumor submissions |
-| `/afwaah/votes/1.0` | Votes on rumors |
-| `/afwaah/identity/1.0` | Member join/leave events |
-| `/afwaah/tombstone/1.0` | Rumor takedown notices |
-| `/afwaah/sync/1.0` | State synchronization requests |
-
----
-
 ## Running the Tests
 
 ```bash
@@ -378,7 +364,7 @@ cd backend
 npm run test:network
 ```
 
-All 53 tests should pass, covering:
+All test cases from file backend/tests/network.test.js should pass, covering:
 - Node creation, start, stop
 - Peer discovery (mDNS) and manual dialing
 - GossipSub publish/subscribe across topics
@@ -389,5 +375,3 @@ All 53 tests should pass, covering:
 - Error handling and edge cases
 
 ---
-
-**Next**: [Phase 3 — Scoring Engine →](./04-SCORING-ENGINE.md)
