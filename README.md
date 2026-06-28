@@ -43,7 +43,7 @@ Rumors are scored not by popularity, but by **Bayesian Truth Serum** — an info
 ![Reputation Leaderboard](images/reputation-leaderboard.png)
 
 ### Distributed Network — Peers Discovered
-![Distributed Network](images/many-users-discovered-on-the-network-by-distributed-system.png)
+![Distributed Network](images/distributed-network-peers.png)
 
 ---
 
