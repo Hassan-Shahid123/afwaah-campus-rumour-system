@@ -51,7 +51,7 @@ function SystemOverview() {
             </div>
           </div>
           {snapshot && snapshot.snapshot && (
-            <div style={{ marginTop: 12, fontSize: 13, color: '#666' }}>
+            <div className="text-secondary" style={{ marginTop: 12, fontSize: 13 }}>
               <strong>Last snapshot:</strong> {snapshot.snapshot.timestamp
                 ? new Date(snapshot.snapshot.timestamp).toLocaleString()
                 : 'N/A'}
@@ -97,7 +97,7 @@ function OpLogViewer() {
         </button>
       ) : (
         <>
-          <div style={{ color: '#555', fontSize: 13, marginBottom: 8 }}>
+          <div className="text-secondary" style={{ fontSize: 13, marginBottom: 8 }}>
             {opLog.length} operation{opLog.length !== 1 ? 's' : ''} recorded
           </div>
           {opLog.length > 0 ? (
@@ -113,7 +113,7 @@ function OpLogViewer() {
                     <td style={{ fontSize: 12, maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {opSummary(op)}
                     </td>
-                    <td style={{ fontSize: 12, color: '#888', whiteSpace: 'nowrap' }}>
+                    <td className="text-muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
                       {op.timestamp ? new Date(op.timestamp).toLocaleTimeString() : '-'}
                     </td>
                   </tr>
@@ -121,7 +121,7 @@ function OpLogViewer() {
               </tbody>
             </table>
           ) : (
-            <div style={{ color: '#888', fontSize: 13 }}>Log is empty — post some rumors first!</div>
+            <div className="text-muted" style={{ fontSize: 13 }}>Log is empty — post some rumors first!</div>
           )}
           <button className="btn btn-secondary" onClick={handleFetch} style={{ marginTop: 12 }}>
             &#8635; Refresh
@@ -173,7 +173,7 @@ function ConfigViewer() {
             <div key={key} style={{ marginBottom: 6 }}>
               <div className="config-header" onClick={() => setExpanded(expanded === key ? null : key)}>
                 <span>{key}</span>
-                <span style={{ fontSize: 11, color: '#888' }}>{expanded === key ? '&#9650;' : '&#9660;'}</span>
+                <span className="text-muted" style={{ fontSize: 11 }}>{expanded === key ? '&#9650;' : '&#9660;'}</span>
               </div>
               {expanded === key && (
                 <div className="result-box" style={{ marginTop: 0, borderTopLeftRadius: 0, borderTopRightRadius: 0 }}>

@@ -108,7 +108,7 @@ function CommunityScoreboard() {
               </tbody>
             </table>
           ) : (
-            <div style={{ color: '#888', fontSize: 13 }}>No users registered yet. Post a rumor or vote to get started!</div>
+            <div className="text-muted" style={{ fontSize: 13 }}>No users registered yet. Post a rumor or vote to get started!</div>
           )}
           <button className="btn btn-secondary" onClick={handleFetch} style={{ marginTop: 12 }}>
             &#8635; Refresh
@@ -154,7 +154,7 @@ function FinalizedRumors() {
                   <td><span className="tag tag-dark">{s.consensus}</span></td>
                   <td><strong>{typeof s.score === 'number' ? s.score.toFixed(1) : s.score}</strong></td>
                   <td>{s.voterCount}</td>
-                  <td style={{ fontSize: 12, color: '#888' }}>{new Date(s.finalizedAt).toLocaleDateString()}</td>
+                  <td className="text-muted" style={{ fontSize: 12 }}>{new Date(s.finalizedAt).toLocaleDateString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -164,7 +164,7 @@ function FinalizedRumors() {
           </button>
         </>
       ) : (
-        <div style={{ color: '#888', fontSize: 13 }}>No rumors have been settled yet.</div>
+        <div className="text-muted" style={{ fontSize: 13 }}>No rumors have been settled yet.</div>
       )}
       {error && <div className="result-box error">{error}</div>}
     </div>

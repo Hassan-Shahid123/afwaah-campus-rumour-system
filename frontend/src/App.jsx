@@ -61,7 +61,7 @@ function AppLayout() {
             <div className="sidebar-user-id">{user.nullifier}</div>
           </div>
         )}
-        <div style={{ padding: '16px 24px', fontSize: 11, opacity: 0.4, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+        <div style={{ padding: '16px 24px', fontSize: 11, opacity: 0.4, borderTop: '1px solid var(--border)' }}>
           Decentralized &middot; Anonymous &middot; ZK
         </div>
       </aside>

@@ -52,11 +52,11 @@ function GettingStarted({ loading, verifyAndCreateAccount, restoreAccount }) {
       <div className="card welcome-card">
         <div style={{ fontSize: 48, marginBottom: 16 }}>&#9670;</div>
         <h3 style={{ marginBottom: 8 }}>Welcome to Afwaah</h3>
-        <p style={{ color: '#555', marginBottom: 8, fontSize: 14, lineHeight: 1.6 }}>
+        <p className="text-secondary" style={{ marginBottom: 8, fontSize: 14, lineHeight: 1.6 }}>
           Join the anonymous campus rumor network. To create your account, verify your
           <strong> university email</strong> — this proves you're a student without revealing your identity.
         </p>
-        <p style={{ color: '#888', fontSize: 12 }}>
+        <p className="text-muted" style={{ fontSize: 12 }}>
           One university email = one anonymous account. No passwords, no personal data stored.
         </p>
       </div>
@@ -72,7 +72,7 @@ function GettingStarted({ loading, verifyAndCreateAccount, restoreAccount }) {
           creates your anonymous account automatically.
         </p>
 
-        <div style={{ background: '#f8f8f8', border: '1px solid var(--border)', borderRadius: 8, padding: 14, marginBottom: 16, fontSize: 13, lineHeight: 1.7 }}>
+        <div className="bg-dark-alt" style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 14, marginBottom: 16, fontSize: 13, lineHeight: 1.7 }}>
           <strong>How to get your .eml file:</strong>
           <ol style={{ margin: '8px 0 0', paddingLeft: 20 }}>
             <li>Log into your <strong>university email</strong> inbox (e.g. @seecs.edu.pk)</li>
@@ -81,7 +81,7 @@ function GettingStarted({ loading, verifyAndCreateAccount, restoreAccount }) {
             <li>In Outlook: File → Save As → choose .eml format</li>
             <li><strong>Upload</strong> the .eml file below or paste its contents</li>
           </ol>
-          <div style={{ marginTop: 8, padding: '8px 10px', background: '#fff3cd', borderRadius: 4, fontSize: 12 }}>
+          <div style={{ marginTop: 8, padding: '8px 10px', background: 'rgba(255, 253, 253, 0.1)', color: '#000000', border: '1px solid rgba(255, 255, 255, 0.3)', borderRadius: 4, fontSize: 12 }}>
             <strong>Important:</strong> Do not edit the .eml file. The DKIM cryptographic signature covers the email headers —
             if even one character is changed, verification fails. This is the same technique Gmail uses to show "signed by seecs.edu.pk".
           </div>
@@ -113,7 +113,7 @@ function GettingStarted({ loading, verifyAndCreateAccount, restoreAccount }) {
                 }}
               />
             </label>
-            <span style={{ fontSize: 12, color: '#888' }}>
+            <span className="text-muted" style={{ fontSize: 12 }}>
               {emlContent ? '✓ File loaded — ready to verify' : 'or paste content below'}
             </span>
           </div>
@@ -221,7 +221,7 @@ function AccountCard({ user, logout }) {
         <div className="account-field full-width">
           <div className="account-label">
             Recovery Key
-            <span style={{ color: '#c00', marginLeft: 8, fontSize: 11, fontWeight: 400 }}>
+            <span style={{ color: '#ef4444', marginLeft: 8, fontSize: 11, fontWeight: 400 }}>
               &#9888; Save this — only way to recover your account
             </span>
           </div>

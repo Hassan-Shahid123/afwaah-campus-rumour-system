@@ -13,7 +13,7 @@ export default function NetworkPage() {
       <P2PStatus />
 
       <div className="card" style={{ padding: 20, background: 'var(--bg-alt)', marginBottom: 24 }}>
-        <p style={{ fontSize: 14, lineHeight: 1.7, color: '#555' }}>
+        <p className="text-secondary" style={{ fontSize: 14, lineHeight: 1.7 }}>
           The network layer runs automatically in the background. When you post a rumor or vote,
           it gets shared with other nodes using <strong>libp2p GossipSub</strong>.
           All nodes stay in sync using <strong>Anti-Entropy Merkle synchronization</strong>.
@@ -155,7 +155,7 @@ function P2PStatus() {
         <>
           <div className="stats-row">
             <div className="stat-card">
-              <div className="stat-value" style={{ color: status.started ? '#080' : '#c00' }}>
+              <div className="stat-value" style={{ color: status.started ? '#4CAF50' : '#ef4444' }}>
                 {status.started ? '● Online' : '○ Offline'}
               </div>
               <div className="stat-label">Node Status</div>
@@ -172,7 +172,7 @@ function P2PStatus() {
             )}
           </div>
           {status.multiaddrs?.length > 0 && (
-            <div style={{ marginTop: 12, fontSize: 12, color: '#666' }}>
+            <div className="text-secondary" style={{ marginTop: 12, fontSize: 12 }}>
               <strong>Listening addresses:</strong>
               <div style={{ fontFamily: 'monospace', marginTop: 4 }}>
                 {status.multiaddrs.map((ma, i) => <div key={i}>{ma}</div>)}
@@ -194,7 +194,7 @@ function P2PStatus() {
           )}
         </>
       ) : (
-        <p style={{ color: '#888' }}>Loading P2P status...</p>
+        <p className="text-muted">Loading P2P status...</p>
       )}
       {error && <div className="result-box error">{error}</div>}
       <button className="btn btn-secondary" onClick={refresh} style={{ marginTop: 12 }}>↻ Refresh</button>

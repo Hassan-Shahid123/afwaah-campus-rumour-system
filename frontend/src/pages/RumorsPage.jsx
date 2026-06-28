@@ -81,13 +81,13 @@ export default function RumorsPage() {
         user.emailVerified ? (
           <PostRumor user={user} onPosted={loadRumors} />
         ) : (
-          <div className="card" style={{ textAlign: 'center', padding: '24px', color: '#888' }}>
-            &#9993; <a href="/" style={{ color: '#000', fontWeight: 600 }}>Verify your university email</a> on the Identity page before you can post rumors or vote
+          <div className="card" style={{ textAlign: 'center', padding: '24px' }}>
+            <span className="text-muted">&#9993; </span><a href="/" className="text-accent" style={{ fontWeight: 600 }}>Verify your university email</a><span className="text-muted"> on the Identity page before you can post rumors or vote</span>
           </div>
         )
       ) : (
-        <div className="card" style={{ textAlign: 'center', padding: '24px', color: '#888' }}>
-          &#9670; <a href="/" style={{ color: '#000', fontWeight: 600 }}>Create an account</a> to post rumors and vote
+        <div className="card" style={{ textAlign: 'center', padding: '24px' }}>
+          <span className="text-muted">&#9670; </span><a href="/" className="text-accent" style={{ fontWeight: 600 }}>Create an account</a><span className="text-muted"> to post rumors and vote</span>
         </div>
       )}
 
@@ -103,7 +103,7 @@ export default function RumorsPage() {
 
       {/* Rumor Feed */}
       {Object.keys(rumors).length === 0 && !loading ? (
-        <div className="card" style={{ textAlign: 'center', padding: 32, color: '#888' }}>
+        <div className="card text-muted" style={{ textAlign: 'center', padding: 32 }}>
           No rumors yet. Be the first to post one!
         </div>
       ) : (
@@ -188,7 +188,7 @@ function PostRumor({ user, onPosted }) {
               <select value={topic} onChange={e => setTopic(e.target.value)} className="topic-select">
                 {topics.map(t => <option key={t} value={t}>#{t}</option>)}
               </select>
-              <span style={{ fontSize: 12, color: '#888' }}>{text.length}/2000</span>
+              <span className="text-muted" style={{ fontSize: 12 }}>{text.length}/2000</span>
             </div>
             <button className="btn btn-primary" onClick={handlePost} disabled={posting || !text.trim()}>
               {posting ? <><span className="spinner" /> Posting...</> : 'Post Rumor'}
@@ -330,7 +330,7 @@ function RumorCard({ id, rumor, voteList, user, onVoted }) {
             <span>&#9632; True ({voteCounts.TRUE})</span>
             <span className="legend-false">&#9632; False ({voteCounts.FALSE})</span>
             <span className="legend-unverified">&#9632; Unsure ({voteCounts.UNVERIFIED})</span>
-            <span style={{ marginLeft: 'auto', color: '#888' }}>{totalVotes} vote{totalVotes !== 1 ? 's' : ''}</span>
+            <span className="text-muted" style={{ marginLeft: 'auto' }}>{totalVotes} vote{totalVotes !== 1 ? 's' : ''}</span>
           </div>
         </div>
       )}
@@ -340,9 +340,9 @@ function RumorCard({ id, rumor, voteList, user, onVoted }) {
         {userVote ? (
           <div className="already-voted">✓ You voted: <strong>{userVote.vote}</strong></div>
         ) : isOwnRumor ? (
-          <span style={{ fontSize: 13, color: '#888' }}>You can't vote on your own post</span>
+          <span className="text-muted" style={{ fontSize: 13 }}>You can't vote on your own post</span>
         ) : user && !user.emailVerified ? (
-          <span style={{ fontSize: 13, color: '#888' }}>Verify your email to vote</span>
+          <span className="text-muted" style={{ fontSize: 13 }}>Verify your email to vote</span>
         ) : user ? (
           <>
             <button className={`vote-btn vote-btn-true ${voting ? 'disabled' : ''}`} onClick={() => handleVote('TRUE')} disabled={voting}>
@@ -356,7 +356,7 @@ function RumorCard({ id, rumor, voteList, user, onVoted }) {
             </button>
           </>
         ) : (
-          <span style={{ fontSize: 13, color: '#888' }}>Sign in to vote</span>
+          <span className="text-muted" style={{ fontSize: 13 }}>Sign in to vote</span>
         )}
 
         <button className="vote-btn" onClick={() => setShowDetails(!showDetails)} style={{ marginLeft: 'auto' }}>
@@ -366,33 +366,33 @@ function RumorCard({ id, rumor, voteList, user, onVoted }) {
 
       {/* BTS Prediction Panel — appears after user selects a vote */}
       {pendingVote && (
-        <div style={{ background: '#f0f7ff', border: '1px solid #b3d4fc', borderRadius: 8, padding: 16, marginTop: 10 }}>
+        <div style={{ background: 'rgba(255, 95, 0, 0.05)', border: '1px solid var(--accent)', borderRadius: 8, padding: 16, marginTop: 10 }}>
           <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
-            Your vote: <span style={{ color: pendingVote === 'TRUE' ? '#15803d' : pendingVote === 'FALSE' ? '#dc2626' : '#a16207' }}>{pendingVote}</span>
+            Your vote: <span style={{ color: pendingVote === 'TRUE' ? 'var(--color-true)' : pendingVote === 'FALSE' ? 'var(--color-false)' : 'var(--color-unsure)' }}>{pendingVote}</span>
           </div>
-          <div style={{ fontSize: 13, color: '#555', marginBottom: 12 }}>
+          <div className="text-secondary" style={{ fontSize: 13, marginBottom: 12 }}>
             <strong>Bayesian Truth Serum:</strong> Now predict what % of <em>other voters</em> will pick each option.
             This prediction is used to calculate your BTS score — honest predictions earn higher rewards.
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ width: 80, fontSize: 13, fontWeight: 500, color: '#15803d' }}>▲ True</span>
+              <span style={{ width: 80, fontSize: 13, fontWeight: 500, color: 'var(--color-true)' }}>▲ True</span>
               <input type="range" min={0} max={100} value={predTrue} onChange={e => setPredTrue(Number(e.target.value))} style={{ flex: 1 }} />
               <span style={{ width: 40, textAlign: 'right', fontSize: 13, fontWeight: 600 }}>{predTrue}%</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ width: 80, fontSize: 13, fontWeight: 500, color: '#dc2626' }}>▼ False</span>
+              <span style={{ width: 80, fontSize: 13, fontWeight: 500, color: 'var(--color-false)' }}>▼ False</span>
               <input type="range" min={0} max={100} value={predFalse} onChange={e => setPredFalse(Number(e.target.value))} style={{ flex: 1 }} />
               <span style={{ width: 40, textAlign: 'right', fontSize: 13, fontWeight: 600 }}>{predFalse}%</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ width: 80, fontSize: 13, fontWeight: 500, color: '#a16207' }}>● Unsure</span>
+              <span style={{ width: 80, fontSize: 13, fontWeight: 500, color: 'var(--color-unsure)' }}>● Unsure</span>
               <input type="range" min={0} max={100} value={predUnsure} onChange={e => setPredUnsure(Number(e.target.value))} style={{ flex: 1 }} />
               <span style={{ width: 40, textAlign: 'right', fontSize: 13, fontWeight: 600 }}>{predUnsure}%</span>
             </div>
           </div>
           {(predTrue + predFalse + predUnsure) !== 100 && (
-            <div style={{ fontSize: 12, color: '#a16207', marginTop: 8 }}>
+            <div style={{ fontSize: 12, color: 'var(--color-unsure)', marginTop: 8 }}>
               Total: {predTrue + predFalse + predUnsure}% — values will be normalized to 100%
             </div>
           )}

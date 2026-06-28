@@ -163,10 +163,10 @@ export class Snapshotter extends EventEmitter {
       }
     }
 
-    // Also register any voters we haven't seen in JOIN ops
+    // Also register any voters we haven't seen in JOIN ops (ignore ephemeral zk_ nullifiers)
     for (const [, votes] of this._votes) {
       for (const v of votes) {
-        if (v.nullifier && !this._reputation.has(v.nullifier)) {
+        if (v.nullifier && !v.nullifier.startsWith('zk_') && !this._reputation.has(v.nullifier)) {
           this._reputation.set(v.nullifier, this.initialTrustScore);
         }
       }

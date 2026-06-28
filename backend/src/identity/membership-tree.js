@@ -10,7 +10,7 @@
 // Key operations:
 //   - addMember(commitment)      → insert a verified student
 //   - generateMerkleProof(index) → create proof for ZK-SNARK
-//   - verifyMerkleProof(proof)   → validate a proof is correct
+//   - verifyMerkleProof(proof)   → validate a proof is corr  ect
 //   - getRoot()                  → current tree root hash
 //   - getRootHistory()           → last N roots for delayed acceptance
 // ─────────────────────────────────────────────────────────────

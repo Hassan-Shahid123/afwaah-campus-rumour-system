@@ -196,22 +196,22 @@ export class EmailVerifier {
       recipientValid = this._isDomainAllowed(recipientDomain);
     }
 
-    // CHECK 2: DKIM signing domain must be from an allowed domain
-    const signingDomain = (dkimSigningDomain || '').toLowerCase();
-    const dkimDomainValid = signingDomain ? this._isDomainAllowed(signingDomain) : false;
+    // CHECK 2: DKIM signing domain (Removed)
+    // We no longer require the DKIM signing domain to be a university domain.
+    // An email from an external sender (e.g., github.com) is valid as long as 
+    // the signed To/Cc header is a university email.
 
     // CHECK 3: DKIM signature must CRYPTOGRAPHICALLY pass
     const dkimCryptoValid = dkimStatus === 'pass';
 
-    // ALL FIVE checks must pass:
+    // ALL checks must pass:
     // 1. Delivered-To is a university inbox (proves who downloaded it)
-    // 2. DKIM signing domain is a university domain
-    // 3. DKIM signature cryptographically verifies (proves headers were NOT edited)
-    // 4. Delivered-To cross-validates against Received "for <>" headers
+    // 2. DKIM signature cryptographically verifies (proves headers were NOT edited)
+    // 3. Delivered-To cross-validates against Received "for <>" headers
     //    (catches manual Delivered-To tampering — since DKIM doesn't sign it)
-    // 5. Delivered-To matches a DKIM-signed To/Cc header
+    // 4. Delivered-To matches a DKIM-signed To/Cc header
     //    (unforgeable anchor — editing To/Cc breaks DKIM verification)
-    const isValid = recipientValid && dkimDomainValid && dkimCryptoValid
+    const isValid = recipientValid && dkimCryptoValid
       && recipientCrossCheck.consistent && signedHeaderCheck.consistent;
 
     return {
@@ -223,7 +223,7 @@ export class EmailVerifier {
       isValid,
       bodyHash: dkimFields.bodyHash || '',
       messageId: parsed.messageId || '',
-      signingDomain,
+      signingDomain: (dkimSigningDomain || '').toLowerCase(),
       dkimStatus,
       dkimInfo,
       recipientCrossCheck,       // expose cross-validation details
@@ -274,10 +274,8 @@ export class EmailVerifier {
       }
     }
 
-    // Check DKIM signing domain
-    if (dkimResult.signingDomain && !this._isDomainAllowed(dkimResult.signingDomain)) {
-      errors.push(`E007: DKIM signing domain "${dkimResult.signingDomain}" is not an authorized university domain`);
-    }
+    // Check DKIM signing domain (Removed)
+    // We no longer require the DKIM signing domain to be a university domain.
 
     if (!dkimResult.from) {
       errors.push('E003: No sender address found');
